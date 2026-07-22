@@ -148,6 +148,40 @@ describe("standalone starter module", () => {
     await vi.waitFor(() => expect(page.shadowRoot?.textContent).toContain("test-user"));
 
     expect(host.sdk.process.run).toHaveBeenCalledWith("grant-1", [], 5_000);
+    expect(host.logger.info).toHaveBeenCalledWith("Executable launch completed code=0");
+  });
+
+  it("logs successful and recoverable example operations through the Host SDK", async () => {
+    const host = hostSdk();
+    await activate(host.sdk);
+    const page = document.createElement("starter-module-page");
+    document.body.append(page);
+    await vi.waitFor(() => expect(page.shadowRoot?.textContent).toContain("SQLite"));
+
+    page.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="database"]')?.click();
+    await vi.waitFor(() => expect(host.logger.info).toHaveBeenCalledWith("Starter record stored"));
+
+    page.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="process"]')?.click();
+    await vi.waitFor(() => expect(host.logger.warn).toHaveBeenCalledWith("Executable launch skipped: no grant"));
+  });
+
+  it("logs a safe failure message without exposing raw process errors", async () => {
+    const host = hostSdk();
+    vi.mocked(host.sdk.filesystem.listGrants).mockResolvedValue([{
+      id: "grant-secret",
+      displayName: "private-tool.exe",
+      kind: "executable",
+      access: { read: false, write: false, list: false, execute: true },
+    }]);
+    vi.mocked(host.sdk.process.run).mockRejectedValue(new Error("C:\\private\\token.exe failed with secret"));
+    await activate(host.sdk);
+    const page = document.createElement("starter-module-page");
+    document.body.append(page);
+
+    page.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="process"]')?.click();
+    await vi.waitFor(() => expect(host.logger.error).toHaveBeenCalledWith("Executable launch failed"));
+    expect(JSON.stringify(host.logger.error.mock.calls)).not.toContain("private\\token.exe");
+    expect(JSON.stringify(host.logger.error.mock.calls)).not.toContain("secret");
   });
 
   it("updates rendered details when namespaced settings change", async () => {

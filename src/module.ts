@@ -134,23 +134,31 @@ class StarterModulePage extends HTMLElement {
       </article>
     `;
     this.#root.querySelector('[data-action="database"]')?.addEventListener("click", async () => {
-      this.#count += 1;
-      this.#render();
-      await host.database.execute("INSERT INTO module_events (kind) VALUES (?1)", ["button"]);
-      await this.#loadDatabaseRecords();
+      try {
+        this.#count += 1;
+        this.#render();
+        await host.database.execute("INSERT INTO module_events (kind) VALUES (?1)", ["button"]);
+        await this.#loadDatabaseRecords();
+        await host.logger.info("Starter record stored");
+      } catch {
+        await host.logger.error("Starter record store failed");
+      }
     });
     this.#root.querySelector('[data-action="process"]')?.addEventListener("click", async () => {
       try {
         const grant = (await host.filesystem.listGrants()).find((item) => item.kind === "executable");
         if (!grant) {
           this.#processResult = { key: "noGrant" };
+          await host.logger.warn("Executable launch skipped: no grant");
         } else {
           const result = await host.process.run(grant.id, [], 5_000);
           const output = result.stdout.trim() || result.stderr.trim();
           this.#processResult = output ? { raw: output } : { key: "processExit", params: { code: result.code ?? "null" } };
+          await host.logger.info(`Executable launch completed code=${result.code ?? "null"}`);
         }
       } catch (error) {
         this.#processResult = { raw: error instanceof Error ? error.message : String(error) };
+        await host.logger.error("Executable launch failed");
       }
       this.#render();
     });

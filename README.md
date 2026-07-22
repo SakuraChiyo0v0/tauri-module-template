@@ -35,7 +35,8 @@ pnpm module:pack -- --version 0.1.1
 5. 只使用 `src/sdk.ts` 声明的 Host SDK V4 能力和语义 CSS 变量；在 `nativeCapabilities` 中按最小权限声明实际所需能力。
 6. 使用数据库参数占位符，通过 `getUserVersion()` / `setUserVersion()` 管理迁移，并把关联修改放进 `transaction()`。
 7. 在 `services.provides` 声明本模块提供的版本化服务；消费者只能通过 `services.call()` 调用 `dependencies` 中的模块，并只传递 JSON 兼容值。
-8. 运行 `pnpm check`，打包后在桌面底座“模块管理”中安装真实 `.mtp` 验证。
+8. 通过 `hostSdk.logger` 记录生命周期和关键操作的最终结果：成功使用 `info`，无效输入、缺少依赖等可恢复结果使用 `warn`，意外失败使用 `error`。日志只写稳定操作名和必要的非敏感结果，不得包含正文、凭据、完整 URL、文件路径、服务负载或原始错误消息。
+9. 为关键操作日志补充测试，确认日志级别正确且没有泄露用户数据；运行 `pnpm check`，打包后在桌面底座“模块管理”中安装真实 `.mtp` 验证。
 
 模块页面正文不由底座翻译。模块应使用自己的双语词典，初始渲染读取 `hostSdk.i18n.getLocale()`，并通过 `hostSdk.i18n.subscribe()` 在语言变化时重新渲染。打包器会拒绝任一宿主可见文本缺少中文或英文的清单。
 

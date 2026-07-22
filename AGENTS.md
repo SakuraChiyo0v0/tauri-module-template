@@ -16,6 +16,9 @@ This repository builds one independently installable `.mtp` module for Modular T
 - Use semantic CSS variables inherited from the base. Do not hard-code product colors.
 - Use parameterized module-private database calls. Never attempt ATTACH, PRAGMA, filesystem paths, or direct access to another module's schema.
 - Use only opaque file grants and module-private relative paths. Never import raw Tauri APIs or infer host filesystem paths.
+- Report lifecycle and key user operations through `hostSdk.logger`; do not use `console` or direct native logging as the only record of an operation.
+- Log successful operations at `info`, recoverable outcomes at `warn`, and unexpected failures at `error`. Do not rely on `debug` or `trace` for the only record of a user operation because the host defaults to an `info` threshold.
+- Keep log messages stable and minimal. Never log user content, credentials, tokens, complete URLs, filesystem paths, service payloads, or raw error messages; prefer an operation name plus safe results such as a count, record ID, trigger source, or exit code.
 - Keep the starter business-neutral and removable.
 
 ## Packaging
@@ -26,4 +29,4 @@ This repository builds one independently installable `.mtp` module for Modular T
 
 ## Verification
 
-Run `pnpm check` and build the same package twice when changing SDK, build, or packaging behavior.
+Run `pnpm check` after module changes. Add focused tests for operation log level and sensitive-data boundaries, and build the same package twice when changing SDK, build, or packaging behavior.
