@@ -1,11 +1,12 @@
 import { activate } from "./module";
-import type { LogLevel, RuntimeModuleHostSdkV2, RuntimeSqlValue, ThemeState } from "./sdk";
+import type { LogLevel, RuntimeModuleHostSdkV3, RuntimeSqlValue, ThemeState } from "./sdk";
 
 const settingListeners = new Set<() => void>();
 const themeListeners = new Set<(theme: ThemeState) => void>();
 const settingKey = "starter-module.dev.settings";
 const databaseKey = "starter-module.dev.database";
 let theme: ThemeState = { mode: "light", preset: "neutral" };
+const privateFiles = new Map<string, number[]>();
 
 function readSettings() {
   try {
@@ -36,8 +37,8 @@ function writeDatabase(value: ReturnType<typeof readDatabase>) {
   localStorage.setItem(databaseKey, JSON.stringify(value));
 }
 
-const hostSdk: RuntimeModuleHostSdkV2 = {
-  sdkVersion: 2,
+const hostSdk: RuntimeModuleHostSdkV3 = {
+  sdkVersion: 3,
   hostVersion: "0.2.0-dev",
   module: { id: "starter-module", version: "0.1.0-dev" },
   logger: {
@@ -92,6 +93,33 @@ const hostSdk: RuntimeModuleHostSdkV2 = {
     async setUserVersion(userVersion) {
       writeDatabase({ ...readDatabase(), userVersion });
     },
+  },
+  filesystem: {
+    async readPrivate(path) { return privateFiles.get(path) ?? []; },
+    async writePrivate(path, data) { privateFiles.set(path, [...data]); return data.length; },
+    async listGrants() { return []; },
+    async readGrant() { throw new Error("Mock grant is unavailable"); },
+    async writeGrant() { throw new Error("Mock grant is unavailable"); },
+    async listDirectory() { return []; },
+    async revokeGrant() {},
+  },
+  process: {
+    async openUrl(url) { log("info", `Mock open URL: ${url}`); },
+    async openPath(grantId) { log("info", `Mock open granted file: ${grantId}`); },
+    async revealInFolder(grantId) { log("info", `Mock reveal granted file: ${grantId}`); },
+    async run() { throw new Error("Mock process execution is unavailable"); },
+  },
+  registry: {
+    async read() { throw new Error("Mock registry is unavailable"); },
+    async write() { throw new Error("Mock registry is unavailable"); },
+    async deleteValue() { throw new Error("Mock registry is unavailable"); },
+  },
+  tray: { async update() {}, async onAction() { return () => undefined; } },
+  shortcuts: {
+    async list() { return [{ shortcutId: "show-main", accelerator: "Ctrl+Shift+M", state: "registered" as const }]; },
+    async rebind() { return []; },
+    async disable() { return []; },
+    async onTrigger() { return () => undefined; },
   },
 };
 

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { activate, deactivate } from "./module";
-import type { RuntimeModuleHostSdkV2, RuntimeSqlValue, ThemeState } from "./sdk";
+import type { RuntimeModuleHostSdkV3, RuntimeSqlValue, ThemeState } from "./sdk";
 
 function hostSdk() {
   let showDetails = true;
@@ -23,8 +23,9 @@ function hostSdk() {
     return { rowsAffected: 1, lastInsertId: records };
   });
   const select = vi.fn();
-  const sdk: RuntimeModuleHostSdkV2 = {
-    sdkVersion: 2,
+  const privateFiles = new Map<string, number[]>();
+  const sdk: RuntimeModuleHostSdkV3 = {
+    sdkVersion: 3,
     hostVersion: "0.2.0",
     module: { id: "starter-module", version: "0.1.0" },
     logger,
@@ -58,6 +59,24 @@ function hostSdk() {
         userVersion = version;
       }),
     },
+    filesystem: {
+      readPrivate: vi.fn(async (path) => privateFiles.get(path) ?? []),
+      writePrivate: vi.fn(async (path, data) => { privateFiles.set(path, [...data]); return data.length; }),
+      listGrants: vi.fn(async () => []),
+      readGrant: vi.fn(async () => []),
+      writeGrant: vi.fn(async () => 0),
+      listDirectory: vi.fn(async () => []),
+      revokeGrant: vi.fn(async () => undefined),
+    },
+    process: {
+      openUrl: vi.fn(async () => undefined),
+      openPath: vi.fn(async () => undefined),
+      revealInFolder: vi.fn(async () => undefined),
+      run: vi.fn(async () => ({ code: 0, stdout: "", stderr: "", timedOut: false })),
+    },
+    registry: { read: vi.fn(), write: vi.fn(), deleteValue: vi.fn() },
+    tray: { update: vi.fn(async () => undefined), onAction: vi.fn(async () => () => undefined) },
+    shortcuts: { list: vi.fn(async () => []), rebind: vi.fn(async () => []), disable: vi.fn(async () => []), onTrigger: vi.fn(async () => () => undefined) },
   };
   return {
     sdk,
@@ -76,7 +95,7 @@ afterEach(async () => {
 });
 
 describe("standalone starter module", () => {
-  it("activates with Host SDK V2 and defines the declared custom element", async () => {
+  it("activates with Host SDK V3 and verifies private storage", async () => {
     const host = hostSdk();
 
     await activate(host.sdk);
@@ -85,6 +104,29 @@ describe("standalone starter module", () => {
     expect(host.logger.info).toHaveBeenCalledWith("Starter module activated");
     expect(host.database.transaction).toHaveBeenCalledWith([expect.objectContaining({ sql: expect.stringContaining("CREATE TABLE") })]);
     expect(host.database.execute).toHaveBeenCalledWith(expect.stringContaining("INSERT INTO module_events"), ["activation"]);
+    expect(host.sdk.filesystem.writePrivate).toHaveBeenCalledWith("verification/activation.txt", expect.any(Array));
+    expect(host.sdk.filesystem.readPrivate).toHaveBeenCalledWith("verification/activation.txt");
+    expect(host.sdk.tray.onAction).toHaveBeenCalledOnce();
+    expect(host.sdk.shortcuts.onTrigger).toHaveBeenCalledOnce();
+  });
+
+  it("runs only an executable selected through an opaque grant", async () => {
+    const host = hostSdk();
+    vi.mocked(host.sdk.filesystem.listGrants).mockResolvedValue([{
+      id: "grant-1",
+      displayName: "whoami.exe",
+      kind: "executable",
+      access: { read: false, write: false, list: false, execute: true },
+    }]);
+    vi.mocked(host.sdk.process.run).mockResolvedValue({ code: 0, stdout: "test-user\n", stderr: "", timedOut: false });
+    await activate(host.sdk);
+    const page = document.createElement("starter-module-page");
+    document.body.append(page);
+
+    (page.shadowRoot?.querySelector('[data-action="process"]') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(page.shadowRoot?.textContent).toContain("test-user"));
+
+    expect(host.sdk.process.run).toHaveBeenCalledWith("grant-1", [], 5_000);
   });
 
   it("updates rendered details when namespaced settings change", async () => {
