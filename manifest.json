@@ -1,8 +1,11 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "starter-module",
-  "name": "Starter Module",
-  "description": "Business-neutral standalone runtime module starter.",
+  "name": { "zh-CN": "起步模块", "en": "Starter Module" },
+  "description": {
+    "zh-CN": "不包含业务功能的独立运行时模块起点。",
+    "en": "Business-neutral standalone runtime module starter."
+  },
   "version": "0.1.0",
   "hostVersion": ">=0.2.0, <0.3.0",
   "sdkVersion": 3,
@@ -14,8 +17,8 @@
   "navigation": [
     {
       "id": "starter-module-home",
-      "title": "Starter Module",
-      "description": "Standalone runtime module development check.",
+      "title": { "zh-CN": "起步模块", "en": "Starter Module" },
+      "description": { "zh-CN": "独立运行时模块开发验证。", "en": "Standalone runtime module development check." },
       "element": "starter-module-page",
       "group": "main",
       "order": 200
@@ -27,8 +30,8 @@
       "type": "switch",
       "group": "starter-module",
       "order": 10,
-      "label": "Show module details",
-      "description": "Updates the module page through namespaced Host SDK settings.",
+      "label": { "zh-CN": "显示模块详情", "en": "Show module details" },
+      "description": { "zh-CN": "通过命名空间隔离的 Host SDK 设置更新模块页面。", "en": "Updates the module page through namespaced Host SDK settings." },
       "defaultValue": true
     }
   ],
@@ -37,10 +40,10 @@
     "process": { "urlSchemes": ["https"], "executableGrants": true },
     "registry": [],
     "tray": [
-      { "id": "open-main", "label": "Open module", "kind": "button", "order": 10 }
+      { "id": "open-main", "label": { "zh-CN": "打开模块", "en": "Open module" }, "kind": "button", "order": 10 }
     ],
     "shortcuts": [
-      { "id": "show-main", "description": "Show the module page", "accelerator": "Ctrl+Shift+M" }
+      { "id": "show-main", "description": { "zh-CN": "显示模块页面", "en": "Show the module page" }, "accelerator": "Ctrl+Shift+M" }
     ]
   }
 }

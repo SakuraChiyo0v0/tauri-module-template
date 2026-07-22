@@ -1,6 +1,7 @@
 export type LogLevel = "trace" | "debug" | "info" | "warn" | "error";
 export type ColorMode = "system" | "light" | "dark";
 export type ThemePresetId = "neutral" | "ocean";
+export type SupportedLocale = "zh-CN" | "en";
 
 export interface ThemeState {
   mode: ColorMode;
@@ -44,6 +45,10 @@ export interface RuntimeModuleHostSdkV3 {
   readonly theme: {
     get(): ThemeState;
     subscribe(listener: (theme: ThemeState) => void): () => void;
+  };
+  readonly i18n: {
+    getLocale(): SupportedLocale;
+    subscribe(listener: (locale: SupportedLocale) => void): () => void;
   };
   readonly database: {
     execute(sql: string, params?: RuntimeSqlValue[]): Promise<RuntimeDatabaseExecuteResult>;

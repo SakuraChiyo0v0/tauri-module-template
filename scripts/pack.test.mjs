@@ -12,10 +12,10 @@ async function fixture() {
   await mkdir(path.join(root, "build"), { recursive: true });
   await writeFile(path.join(root, "build", "index.js"), "export function activate() {}\n");
   await writeFile(path.join(root, "manifest.json"), JSON.stringify({
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: "starter-module",
-    name: "Starter Module",
-    description: "Fixture",
+    name: { "zh-CN": "起步模块", en: "Starter Module" },
+    description: { "zh-CN": "测试包", en: "Fixture" },
     version: "0.1.0",
     hostVersion: ">=0.2.0, <0.3.0",
     sdkVersion: 2,
@@ -49,6 +49,16 @@ describe("module packer", () => {
     const second = await readFile(secondPath);
 
     expect(second).toEqual(first);
+  });
+
+  it("rejects a manifest when any host-rendered text misses a required language", async () => {
+    const root = await fixture();
+    const manifestPath = path.join(root, "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.name = { "zh-CN": "起步模块" };
+    await writeFile(manifestPath, JSON.stringify(manifest));
+
+    await expect(packModule(root)).rejects.toThrow(/zh-CN.*en|localized/i);
   });
 
   it("overrides the artifact version without rewriting the source manifest", async () => {

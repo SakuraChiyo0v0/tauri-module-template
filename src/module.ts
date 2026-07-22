@@ -1,9 +1,34 @@
-import type { RuntimeModuleHostSdkV3, ThemeState } from "./sdk";
+import type { RuntimeModuleHostSdkV3, SupportedLocale, ThemeState } from "./sdk";
 
 const ELEMENT_NAME = "starter-module-page";
 let activeHost: RuntimeModuleHostSdkV3 | undefined;
 let unsubscribeTray: (() => void) | undefined;
 let unsubscribeShortcut: (() => void) | undefined;
+
+const messages = {
+  title: { "zh-CN": "独立模块已就绪", en: "Standalone module ready" },
+  description: { "zh-CN": "这个无业务页面用于验证路由、设置、主题、日志和本地 UI 状态。", en: "This business-neutral page verifies routing, settings, theme, logs and local UI state." },
+  module: { "zh-CN": "模块", en: "Module" },
+  host: { "zh-CN": "宿主", en: "Host" },
+  sqlite: { "zh-CN": "SQLite", en: "SQLite" },
+  privateFile: { "zh-CN": "私有文件", en: "Private file" },
+  loadingRecords: { "zh-CN": "加载中", en: "loading" },
+  records: { "zh-CN": "{count} 条记录", en: "{count} records" },
+  storeRecord: { "zh-CN": "保存测试记录 · 本地计数 {count}", en: "Store test record · local count {count}" },
+  runExecutable: { "zh-CN": "运行已授权程序", en: "Run granted executable" },
+  grantHelp: { "zh-CN": "在模块管理中授权一个可执行文件，以测试受控进程启动。", en: "Grant an executable in Module Manager to test controlled process launch." },
+  noGrant: { "zh-CN": "没有可用的可执行文件授权。", en: "No executable grant is available." },
+  processExit: { "zh-CN": "进程退出码：{code}。", en: "Process exited with code {code}." },
+} as const;
+
+type MessageKey = keyof typeof messages;
+
+function translate(locale: SupportedLocale, key: MessageKey, params: Record<string, string | number> = {}) {
+  return Object.entries(params).reduce(
+    (message, [name, value]) => message.split(`{${name}}`).join(String(value)),
+    messages[key][locale] as string,
+  );
+}
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>'"]/g, (character) => ({
@@ -19,10 +44,12 @@ class StarterModulePage extends HTMLElement {
   readonly #root = this.attachShadow({ mode: "open" });
   #unsubscribeSettings?: () => void;
   #unsubscribeTheme?: () => void;
+  #unsubscribeLocale?: () => void;
   #theme?: ThemeState;
+  #locale: SupportedLocale = "zh-CN";
   #count = 0;
   #databaseRecords?: number;
-  #processResult = "Grant an executable in Module Manager to test controlled process launch.";
+  #processResult: { key: MessageKey; params?: Record<string, string | number> } | { raw: string } = { key: "grantHelp" };
 
   connectedCallback() {
     const host = activeHost;
@@ -32,9 +59,14 @@ class StarterModulePage extends HTMLElement {
     }
 
     this.#theme = host.theme.get();
+    this.#locale = host.i18n.getLocale();
     this.#unsubscribeSettings = host.settings.subscribe(() => this.#render());
     this.#unsubscribeTheme = host.theme.subscribe((theme) => {
       this.#theme = theme;
+      this.#render();
+    });
+    this.#unsubscribeLocale = host.i18n.subscribe((locale) => {
+      this.#locale = locale;
       this.#render();
     });
     this.#render();
@@ -52,8 +84,10 @@ class StarterModulePage extends HTMLElement {
   disconnectedCallback() {
     this.#unsubscribeSettings?.();
     this.#unsubscribeTheme?.();
+    this.#unsubscribeLocale?.();
     this.#unsubscribeSettings = undefined;
     this.#unsubscribeTheme = undefined;
+    this.#unsubscribeLocale = undefined;
   }
 
   #render() {
@@ -61,8 +95,16 @@ class StarterModulePage extends HTMLElement {
     if (!host) return;
     const showDetails = host.settings.get("showDetails", true);
     const theme = this.#theme ?? host.theme.get();
+    const locale = this.#locale;
+    const t = (key: MessageKey, params?: Record<string, string | number>) => translate(locale, key, params);
+    const databaseRecords = this.#databaseRecords === undefined
+      ? t("loadingRecords")
+      : t("records", { count: this.#databaseRecords });
+    const processResult = "raw" in this.#processResult
+      ? this.#processResult.raw
+      : t(this.#processResult.key, this.#processResult.params);
     const details = showDetails
-      ? `<dl><div><dt>Module</dt><dd>${escapeHtml(host.module.id)}@${escapeHtml(host.module.version)}</dd></div><div><dt>Host</dt><dd>${escapeHtml(host.hostVersion)}</dd></div><div><dt>SQLite</dt><dd>${this.#databaseRecords ?? "loading"} records</dd></div><div><dt>Private file</dt><dd>Host SDK V3</dd></div></dl>`
+      ? `<dl><div><dt>${t("module")}</dt><dd>${escapeHtml(host.module.id)}@${escapeHtml(host.module.version)}</dd></div><div><dt>${t("host")}</dt><dd>${escapeHtml(host.hostVersion)}</dd></div><div><dt>${t("sqlite")}</dt><dd>${escapeHtml(databaseRecords)}</dd></div><div><dt>${t("privateFile")}</dt><dd>Host SDK V3</dd></div></dl>`
       : "";
 
     this.#root.innerHTML = `
@@ -80,14 +122,14 @@ class StarterModulePage extends HTMLElement {
         button { border: 0; border-radius: 8px; padding: 8px 12px; background: var(--primary, #111827); color: var(--primary-foreground, #ffffff); cursor: pointer; }
       </style>
       <article data-theme-mode="${escapeHtml(theme.mode)}" data-theme-preset="${escapeHtml(theme.preset)}">
-        <h2>Standalone module ready</h2>
-        <p>This business-neutral page verifies routing, settings, theme, logs and local UI state.</p>
+        <h2>${t("title")}</h2>
+        <p>${t("description")}</p>
         ${details}
         <div class="actions">
-          <button type="button" data-action="database">Store test record · local count ${this.#count}</button>
-          <button type="button" data-action="process">Run granted executable</button>
+          <button type="button" data-action="database">${t("storeRecord", { count: this.#count })}</button>
+          <button type="button" data-action="process">${t("runExecutable")}</button>
         </div>
-        <p class="process-result">${escapeHtml(this.#processResult)}</p>
+        <p class="process-result">${escapeHtml(processResult)}</p>
       </article>
     `;
     this.#root.querySelector('[data-action="database"]')?.addEventListener("click", async () => {
@@ -100,13 +142,14 @@ class StarterModulePage extends HTMLElement {
       try {
         const grant = (await host.filesystem.listGrants()).find((item) => item.kind === "executable");
         if (!grant) {
-          this.#processResult = "No executable grant is available.";
+          this.#processResult = { key: "noGrant" };
         } else {
           const result = await host.process.run(grant.id, [], 5_000);
-          this.#processResult = result.stdout.trim() || result.stderr.trim() || `Process exited with code ${result.code}.`;
+          const output = result.stdout.trim() || result.stderr.trim();
+          this.#processResult = output ? { raw: output } : { key: "processExit", params: { code: result.code ?? "null" } };
         }
       } catch (error) {
-        this.#processResult = error instanceof Error ? error.message : String(error);
+        this.#processResult = { raw: error instanceof Error ? error.message : String(error) };
       }
       this.#render();
     });

@@ -1,11 +1,13 @@
 import { activate } from "./module";
-import type { LogLevel, RuntimeModuleHostSdkV3, RuntimeSqlValue, ThemeState } from "./sdk";
+import type { LogLevel, RuntimeModuleHostSdkV3, RuntimeSqlValue, SupportedLocale, ThemeState } from "./sdk";
 
 const settingListeners = new Set<() => void>();
 const themeListeners = new Set<(theme: ThemeState) => void>();
+const localeListeners = new Set<(locale: SupportedLocale) => void>();
 const settingKey = "starter-module.dev.settings";
 const databaseKey = "starter-module.dev.database";
 let theme: ThemeState = { mode: "light", preset: "neutral" };
+let locale: SupportedLocale = "zh-CN";
 const privateFiles = new Map<string, number[]>();
 
 function readSettings() {
@@ -68,6 +70,13 @@ const hostSdk: RuntimeModuleHostSdkV3 = {
     subscribe(listener) {
       themeListeners.add(listener);
       return () => themeListeners.delete(listener);
+    },
+  },
+  i18n: {
+    getLocale: () => locale,
+    subscribe(listener) {
+      localeListeners.add(listener);
+      return () => localeListeners.delete(listener);
     },
   },
   database: {
@@ -133,4 +142,9 @@ document.querySelector("#toggle-theme")?.addEventListener("click", () => {
   theme = { ...theme, mode: theme.mode === "dark" ? "light" : "dark" };
   document.documentElement.dataset.theme = theme.mode;
   themeListeners.forEach((listener) => listener(theme));
+});
+document.querySelector("#toggle-locale")?.addEventListener("click", () => {
+  locale = locale === "zh-CN" ? "en" : "zh-CN";
+  document.documentElement.lang = locale;
+  localeListeners.forEach((listener) => listener(locale));
 });

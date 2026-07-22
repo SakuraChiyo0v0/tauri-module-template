@@ -20,6 +20,17 @@ function compareVersions(left, right) {
   return 0;
 }
 
+function validateLocalizedText(value, label) {
+  const keys = value && typeof value === "object" && !Array.isArray(value) ? Object.keys(value).sort() : [];
+  if (keys.join(",") !== "en,zh-CN"
+    || typeof value["zh-CN"] !== "string"
+    || typeof value.en !== "string"
+    || value["zh-CN"].trim() === ""
+    || value.en.trim() === "") {
+    throw new Error(`${label} must be localized text with non-empty zh-CN and en values`);
+  }
+}
+
 export function validateArchivePath(value) {
   if (typeof value !== "string" || value.length === 0 || value.includes("\\") || path.posix.isAbsolute(value) || /^[A-Za-z]:\//.test(value)) {
     throw new Error(`unsafe archive path: ${value}`);
@@ -120,15 +131,34 @@ async function collectAssets(root, relativeDirectory = "assets") {
 }
 
 function validateManifest(manifest) {
-  if (manifest?.schemaVersion !== 1 || ![1, 2, 3].includes(manifest?.sdkVersion) || manifest?.entry !== "index.js") {
-    throw new Error("manifest must use schemaVersion 1, a supported sdkVersion, and entry index.js");
+  if (manifest?.schemaVersion !== 2 || ![2, 3].includes(manifest?.sdkVersion) || manifest?.entry !== "index.js") {
+    throw new Error("manifest must use schemaVersion 2, Host SDK V2 or V3, and entry index.js");
   }
   if (!MODULE_ID_PATTERN.test(manifest.id)) throw new Error(`invalid module id: ${manifest.id}`);
+  validateLocalizedText(manifest.name, "module name");
+  validateLocalizedText(manifest.description, "module description");
+  for (const [index, navigation] of (manifest.navigation ?? []).entries()) {
+    validateLocalizedText(navigation.title, `navigation[${index}].title`);
+    if (navigation.description !== undefined) validateLocalizedText(navigation.description, `navigation[${index}].description`);
+  }
+  for (const [index, setting] of (manifest.settings ?? []).entries()) {
+    validateLocalizedText(setting.label, `settings[${index}].label`);
+    if (setting.description !== undefined) validateLocalizedText(setting.description, `settings[${index}].description`);
+    for (const [optionIndex, option] of (setting.options ?? []).entries()) {
+      validateLocalizedText(option.label, `settings[${index}].options[${optionIndex}].label`);
+    }
+  }
   if (manifest.sdkVersion === 3 && (!manifest.nativeCapabilities || typeof manifest.nativeCapabilities !== "object" || Array.isArray(manifest.nativeCapabilities))) {
     throw new Error("Host SDK V3 manifest must declare nativeCapabilities");
   }
   if (manifest.sdkVersion < 3 && manifest.nativeCapabilities !== undefined) {
     throw new Error("nativeCapabilities require Host SDK V3");
+  }
+  for (const [index, item] of (manifest.nativeCapabilities?.tray ?? []).entries()) {
+    if (item.kind !== "separator") validateLocalizedText(item.label, `nativeCapabilities.tray[${index}].label`);
+  }
+  for (const [index, shortcut] of (manifest.nativeCapabilities?.shortcuts ?? []).entries()) {
+    validateLocalizedText(shortcut.description, `nativeCapabilities.shortcuts[${index}].description`);
   }
   parseVersion(manifest.version, "manifest version");
 }

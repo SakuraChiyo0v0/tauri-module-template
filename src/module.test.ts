@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { activate, deactivate } from "./module";
-import type { RuntimeModuleHostSdkV3, RuntimeSqlValue, ThemeState } from "./sdk";
+import type { RuntimeModuleHostSdkV3, RuntimeSqlValue, SupportedLocale, ThemeState } from "./sdk";
 
 function hostSdk() {
   let showDetails = true;
@@ -9,6 +9,8 @@ function hostSdk() {
   let records = 0;
   const settingListeners = new Set<() => void>();
   const themeListeners = new Set<(value: ThemeState) => void>();
+  const localeListeners = new Set<(value: SupportedLocale) => void>();
+  let locale: SupportedLocale = "zh-CN";
   const logger = {
     trace: vi.fn(async () => undefined),
     debug: vi.fn(async () => undefined),
@@ -45,6 +47,13 @@ function hostSdk() {
       subscribe: (listener) => {
         themeListeners.add(listener);
         return () => themeListeners.delete(listener);
+      },
+    },
+    i18n: {
+      getLocale: () => locale,
+      subscribe: (listener) => {
+        localeListeners.add(listener);
+        return () => localeListeners.delete(listener);
       },
     },
     database: {
@@ -85,6 +94,10 @@ function hostSdk() {
     setTheme(next: ThemeState) {
       theme = next;
       themeListeners.forEach((listener) => listener(theme));
+    },
+    setLocale(next: SupportedLocale) {
+      locale = next;
+      localeListeners.forEach((listener) => listener(locale));
     },
   };
 }
@@ -139,6 +152,18 @@ describe("standalone starter module", () => {
     expect(page.shadowRoot?.textContent).toContain("0.2.0");
     host.sdk.settings.set("showDetails", false);
     expect(page.shadowRoot?.textContent).not.toContain("0.2.0");
+  });
+
+  it("renders Chinese and English from the Host SDK locale subscription", async () => {
+    const host = hostSdk();
+    await activate(host.sdk);
+    const page = document.createElement("starter-module-page");
+    document.body.append(page);
+
+    expect(page.shadowRoot?.textContent).toContain("独立模块已就绪");
+    host.setLocale("en");
+    expect(page.shadowRoot?.textContent).toContain("Standalone module ready");
+    expect(page.shadowRoot?.textContent).not.toContain("独立模块已就绪");
   });
 
   it("reflects subscribed theme changes and cleans up when disconnected", async () => {
