@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { activate, deactivate } from "./module";
-import type { RuntimeModuleHostSdkV3, RuntimeSqlValue, SupportedLocale, ThemeState } from "./sdk";
+import type { RuntimeModuleHostSdkV4, RuntimeSqlValue, SupportedLocale, ThemeState } from "./sdk";
 
 function hostSdk() {
   let showDetails = true;
@@ -26,8 +26,9 @@ function hostSdk() {
   });
   const select = vi.fn();
   const privateFiles = new Map<string, number[]>();
-  const sdk: RuntimeModuleHostSdkV3 = {
-    sdkVersion: 3,
+  const expose = vi.fn(() => () => undefined);
+  const sdk: RuntimeModuleHostSdkV4 = {
+    sdkVersion: 4,
     hostVersion: "0.2.0",
     module: { id: "starter-module", version: "0.1.0" },
     logger,
@@ -86,11 +87,17 @@ function hostSdk() {
     registry: { read: vi.fn(), write: vi.fn(), deleteValue: vi.fn() },
     tray: { update: vi.fn(async () => undefined), onAction: vi.fn(async () => () => undefined) },
     shortcuts: { list: vi.fn(async () => []), rebind: vi.fn(async () => []), disable: vi.fn(async () => []), onTrigger: vi.fn(async () => () => undefined) },
+    services: {
+      expose,
+      available: vi.fn(() => false),
+      async call() { throw new Error("Mock dependency service is unavailable"); },
+    },
   };
   return {
     sdk,
     logger,
     database: { execute, select, transaction },
+    services: { expose },
     setTheme(next: ThemeState) {
       theme = next;
       themeListeners.forEach((listener) => listener(theme));
@@ -108,7 +115,7 @@ afterEach(async () => {
 });
 
 describe("standalone starter module", () => {
-  it("activates with Host SDK V3 and verifies private storage", async () => {
+  it("activates with Host SDK V4, registers its service and verifies private storage", async () => {
     const host = hostSdk();
 
     await activate(host.sdk);
@@ -121,6 +128,7 @@ describe("standalone starter module", () => {
     expect(host.sdk.filesystem.readPrivate).toHaveBeenCalledWith("verification/activation.txt");
     expect(host.sdk.tray.onAction).toHaveBeenCalledOnce();
     expect(host.sdk.shortcuts.onTrigger).toHaveBeenCalledOnce();
+    expect(host.services.expose).toHaveBeenCalledWith("starter.v1", expect.objectContaining({ ping: expect.any(Function) }));
   });
 
   it("runs only an executable selected through an opaque grant", async () => {

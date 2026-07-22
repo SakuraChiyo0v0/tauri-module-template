@@ -61,6 +61,26 @@ describe("module packer", () => {
     await expect(packModule(root)).rejects.toThrow(/zh-CN.*en|localized/i);
   });
 
+  it("accepts SDK V4 service declarations and rejects invalid service boundaries", async () => {
+    const root = await fixture();
+    const manifestPath = path.join(root, "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.sdkVersion = 4;
+    manifest.services = { provides: ["notes.v1"] };
+    manifest.nativeCapabilities = { filesystem: null, process: null, registry: [], tray: [], shortcuts: [] };
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await expect(packModule(root)).resolves.toMatch(/\.mtp$/);
+
+    manifest.services = { provides: ["notes.v1", "notes.v1"] };
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await expect(packModule(root)).rejects.toThrow(/service/i);
+
+    manifest.sdkVersion = 3;
+    manifest.services = { provides: ["notes.v1"] };
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await expect(packModule(root)).rejects.toThrow(/service/i);
+  });
+
   it("overrides the artifact version without rewriting the source manifest", async () => {
     const root = await fixture();
 

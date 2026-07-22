@@ -1,9 +1,10 @@
-import type { RuntimeModuleHostSdkV3, SupportedLocale, ThemeState } from "./sdk";
+import type { RuntimeModuleHostSdkV4, SupportedLocale, ThemeState } from "./sdk";
 
 const ELEMENT_NAME = "starter-module-page";
-let activeHost: RuntimeModuleHostSdkV3 | undefined;
+let activeHost: RuntimeModuleHostSdkV4 | undefined;
 let unsubscribeTray: (() => void) | undefined;
 let unsubscribeShortcut: (() => void) | undefined;
+let unregisterService: (() => void) | undefined;
 
 const messages = {
   title: { "zh-CN": "独立模块已就绪", en: "Standalone module ready" },
@@ -104,7 +105,7 @@ class StarterModulePage extends HTMLElement {
       ? this.#processResult.raw
       : t(this.#processResult.key, this.#processResult.params);
     const details = showDetails
-      ? `<dl><div><dt>${t("module")}</dt><dd>${escapeHtml(host.module.id)}@${escapeHtml(host.module.version)}</dd></div><div><dt>${t("host")}</dt><dd>${escapeHtml(host.hostVersion)}</dd></div><div><dt>${t("sqlite")}</dt><dd>${escapeHtml(databaseRecords)}</dd></div><div><dt>${t("privateFile")}</dt><dd>Host SDK V3</dd></div></dl>`
+      ? `<dl><div><dt>${t("module")}</dt><dd>${escapeHtml(host.module.id)}@${escapeHtml(host.module.version)}</dd></div><div><dt>${t("host")}</dt><dd>${escapeHtml(host.hostVersion)}</dd></div><div><dt>${t("sqlite")}</dt><dd>${escapeHtml(databaseRecords)}</dd></div><div><dt>${t("privateFile")}</dt><dd>Host SDK V4</dd></div></dl>`
       : "";
 
     this.#root.innerHTML = `
@@ -156,8 +157,8 @@ class StarterModulePage extends HTMLElement {
   }
 }
 
-export async function activate(hostSdk: RuntimeModuleHostSdkV3) {
-  if (hostSdk.sdkVersion !== 3) throw new Error(`Unsupported Host SDK version: ${hostSdk.sdkVersion}`);
+export async function activate(hostSdk: RuntimeModuleHostSdkV4) {
+  if (hostSdk.sdkVersion !== 4) throw new Error(`Unsupported Host SDK version: ${hostSdk.sdkVersion}`);
   const userVersion = await hostSdk.database.getUserVersion();
   if (userVersion < 1) {
     await hostSdk.database.transaction([{
@@ -170,6 +171,9 @@ export async function activate(hostSdk: RuntimeModuleHostSdkV3) {
   await hostSdk.filesystem.readPrivate("verification/activation.txt");
   unsubscribeTray = await hostSdk.tray.onAction((itemId) => hostSdk.logger.info(`Tray action: ${itemId}`));
   unsubscribeShortcut = await hostSdk.shortcuts.onTrigger((shortcutId) => hostSdk.logger.info(`Shortcut trigger: ${shortcutId}`));
+  unregisterService = hostSdk.services.expose("starter.v1", {
+    ping: () => ({ status: "ready", moduleVersion: hostSdk.module.version }),
+  });
   activeHost = hostSdk;
   if (!customElements.get(ELEMENT_NAME)) customElements.define(ELEMENT_NAME, StarterModulePage);
   await hostSdk.logger.info("Starter module activated");
@@ -179,7 +183,9 @@ export async function deactivate() {
   if (activeHost) await activeHost.logger.info("Starter module deactivated");
   unsubscribeTray?.();
   unsubscribeShortcut?.();
+  unregisterService?.();
   unsubscribeTray = undefined;
   unsubscribeShortcut = undefined;
+  unregisterService = undefined;
   activeHost = undefined;
 }

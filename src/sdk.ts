@@ -29,8 +29,20 @@ export interface RuntimeDatabaseExecuteResult {
   lastInsertId: number;
 }
 
-export interface RuntimeModuleHostSdkV3 {
-  readonly sdkVersion: 3;
+export type RuntimeServiceValue =
+  | null
+  | boolean
+  | number
+  | string
+  | RuntimeServiceValue[]
+  | { [key: string]: RuntimeServiceValue };
+
+export type RuntimeServiceHandler = (
+  input: RuntimeServiceValue,
+) => RuntimeServiceValue | Promise<RuntimeServiceValue>;
+
+export interface RuntimeModuleHostSdkV4 {
+  readonly sdkVersion: 4;
   readonly hostVersion: string;
   readonly module: {
     readonly id: string;
@@ -94,9 +106,19 @@ export interface RuntimeModuleHostSdkV3 {
     disable(shortcutId: string): Promise<unknown[]>;
     onTrigger(listener: (shortcutId: string) => void): Promise<() => void>;
   };
+  readonly services: {
+    expose(serviceId: string, handlers: Record<string, RuntimeServiceHandler>): () => void;
+    available(providerModuleId: string, serviceId: string): boolean;
+    call<T extends RuntimeServiceValue = RuntimeServiceValue>(
+      providerModuleId: string,
+      serviceId: string,
+      method: string,
+      input?: RuntimeServiceValue,
+    ): Promise<T>;
+  };
 }
 
 export interface RuntimeModuleExports {
-  activate(hostSdk: RuntimeModuleHostSdkV3): void | Promise<void>;
+  activate(hostSdk: RuntimeModuleHostSdkV4): void | Promise<void>;
   deactivate?(): void | Promise<void>;
 }

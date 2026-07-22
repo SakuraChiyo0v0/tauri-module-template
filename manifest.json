@@ -8,11 +8,14 @@
   },
   "version": "0.1.0",
   "hostVersion": ">=0.2.0, <0.3.0",
-  "sdkVersion": 3,
+  "sdkVersion": 4,
   "entry": "index.js",
   "dependencies": {
     "required": [],
     "optional": []
+  },
+  "services": {
+    "provides": ["starter.v1"]
   },
   "navigation": [
     {

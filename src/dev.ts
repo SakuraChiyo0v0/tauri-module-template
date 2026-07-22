@@ -1,5 +1,12 @@
 import { activate } from "./module";
-import type { LogLevel, RuntimeModuleHostSdkV3, RuntimeSqlValue, SupportedLocale, ThemeState } from "./sdk";
+import type {
+  LogLevel,
+  RuntimeModuleHostSdkV4,
+  RuntimeServiceHandler,
+  RuntimeSqlValue,
+  SupportedLocale,
+  ThemeState,
+} from "./sdk";
 
 const settingListeners = new Set<() => void>();
 const themeListeners = new Set<(theme: ThemeState) => void>();
@@ -9,6 +16,7 @@ const databaseKey = "starter-module.dev.database";
 let theme: ThemeState = { mode: "light", preset: "neutral" };
 let locale: SupportedLocale = "zh-CN";
 const privateFiles = new Map<string, number[]>();
+const exposedServices = new Map<string, Record<string, RuntimeServiceHandler>>();
 
 function readSettings() {
   try {
@@ -39,8 +47,8 @@ function writeDatabase(value: ReturnType<typeof readDatabase>) {
   localStorage.setItem(databaseKey, JSON.stringify(value));
 }
 
-const hostSdk: RuntimeModuleHostSdkV3 = {
-  sdkVersion: 3,
+const hostSdk: RuntimeModuleHostSdkV4 = {
+  sdkVersion: 4,
   hostVersion: "0.2.0-dev",
   module: { id: "starter-module", version: "0.1.0-dev" },
   logger: {
@@ -130,6 +138,17 @@ const hostSdk: RuntimeModuleHostSdkV3 = {
     async disable() { return []; },
     async onTrigger() { return () => undefined; },
   },
+  services: {
+    expose(serviceId, handlers) {
+      if (exposedServices.has(serviceId)) throw new Error(`Mock service already registered: ${serviceId}`);
+      exposedServices.set(serviceId, handlers);
+      return () => exposedServices.delete(serviceId);
+    },
+    available() { return false; },
+    async call(providerModuleId: string, serviceId: string, method: string) {
+      throw new Error(`Mock dependency service is unavailable: ${providerModuleId}/${serviceId}.${method}`);
+    },
+  },
 };
 
 await activate(hostSdk);
@@ -147,4 +166,8 @@ document.querySelector("#toggle-locale")?.addEventListener("click", () => {
   locale = locale === "zh-CN" ? "en" : "zh-CN";
   document.documentElement.lang = locale;
   localeListeners.forEach((listener) => listener(locale));
+});
+document.querySelector("#call-service")?.addEventListener("click", async () => {
+  const result = await exposedServices.get("starter.v1")?.ping?.({ source: "preview" });
+  await log("info", `Mock service result: ${JSON.stringify(result)}`);
 });

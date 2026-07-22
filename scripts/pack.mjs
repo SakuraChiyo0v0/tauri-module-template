@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const SEMVER_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const MODULE_ID_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)+$/;
+const SERVICE_ID_PATTERN = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$/;
 
 function parseVersion(value, label) {
   const match = SEMVER_PATTERN.exec(value);
@@ -131,8 +132,8 @@ async function collectAssets(root, relativeDirectory = "assets") {
 }
 
 function validateManifest(manifest) {
-  if (manifest?.schemaVersion !== 2 || ![2, 3].includes(manifest?.sdkVersion) || manifest?.entry !== "index.js") {
-    throw new Error("manifest must use schemaVersion 2, Host SDK V2 or V3, and entry index.js");
+  if (manifest?.schemaVersion !== 2 || ![2, 3, 4].includes(manifest?.sdkVersion) || manifest?.entry !== "index.js") {
+    throw new Error("manifest must use schemaVersion 2, Host SDK V2, V3 or V4, and entry index.js");
   }
   if (!MODULE_ID_PATTERN.test(manifest.id)) throw new Error(`invalid module id: ${manifest.id}`);
   validateLocalizedText(manifest.name, "module name");
@@ -148,11 +149,26 @@ function validateManifest(manifest) {
       validateLocalizedText(option.label, `settings[${index}].options[${optionIndex}].label`);
     }
   }
-  if (manifest.sdkVersion === 3 && (!manifest.nativeCapabilities || typeof manifest.nativeCapabilities !== "object" || Array.isArray(manifest.nativeCapabilities))) {
-    throw new Error("Host SDK V3 manifest must declare nativeCapabilities");
+  if (manifest.sdkVersion >= 3 && (!manifest.nativeCapabilities || typeof manifest.nativeCapabilities !== "object" || Array.isArray(manifest.nativeCapabilities))) {
+    throw new Error("Host SDK V3/V4 manifest must declare nativeCapabilities");
   }
   if (manifest.sdkVersion < 3 && manifest.nativeCapabilities !== undefined) {
     throw new Error("nativeCapabilities require Host SDK V3");
+  }
+  if (manifest.sdkVersion < 4 && manifest.services !== undefined) throw new Error("module services require Host SDK V4");
+  if (manifest.services !== undefined) {
+    if (!manifest.services || typeof manifest.services !== "object" || Array.isArray(manifest.services)
+      || Object.keys(manifest.services).some((key) => key !== "provides")
+      || !Array.isArray(manifest.services.provides)) {
+      throw new Error("invalid module services declaration");
+    }
+    const serviceIds = new Set();
+    for (const serviceId of manifest.services.provides) {
+      if (typeof serviceId !== "string" || !SERVICE_ID_PATTERN.test(serviceId) || serviceIds.has(serviceId)) {
+        throw new Error(`invalid or duplicate service id: ${serviceId}`);
+      }
+      serviceIds.add(serviceId);
+    }
   }
   for (const [index, item] of (manifest.nativeCapabilities?.tray ?? []).entries()) {
     if (item.kind !== "separator") validateLocalizedText(item.label, `nativeCapabilities.tray[${index}].label`);
