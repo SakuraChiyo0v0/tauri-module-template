@@ -5,7 +5,7 @@
   "description": "Business-neutral standalone runtime module starter.",
   "version": "0.1.0",
   "hostVersion": ">=0.2.0, <0.3.0",
-  "sdkVersion": 2,
+  "sdkVersion": 3,
   "entry": "index.js",
   "dependencies": {
     "required": [],
@@ -31,5 +31,16 @@
       "description": "Updates the module page through namespaced Host SDK settings.",
       "defaultValue": true
     }
-  ]
+  ],
+  "nativeCapabilities": {
+    "filesystem": { "private": true, "external": ["read", "write", "list"] },
+    "process": { "urlSchemes": ["https"], "executableGrants": true },
+    "registry": [],
+    "tray": [
+      { "id": "open-main", "label": "Open module", "kind": "button", "order": 10 }
+    ],
+    "shortcuts": [
+      { "id": "show-main", "description": "Show the module page", "accelerator": "Ctrl+Shift+M" }
+    ]
+  }
 }

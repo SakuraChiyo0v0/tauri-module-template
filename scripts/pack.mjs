@@ -120,10 +120,16 @@ async function collectAssets(root, relativeDirectory = "assets") {
 }
 
 function validateManifest(manifest) {
-  if (manifest?.schemaVersion !== 1 || ![1, 2].includes(manifest?.sdkVersion) || manifest?.entry !== "index.js") {
+  if (manifest?.schemaVersion !== 1 || ![1, 2, 3].includes(manifest?.sdkVersion) || manifest?.entry !== "index.js") {
     throw new Error("manifest must use schemaVersion 1, a supported sdkVersion, and entry index.js");
   }
   if (!MODULE_ID_PATTERN.test(manifest.id)) throw new Error(`invalid module id: ${manifest.id}`);
+  if (manifest.sdkVersion === 3 && (!manifest.nativeCapabilities || typeof manifest.nativeCapabilities !== "object" || Array.isArray(manifest.nativeCapabilities))) {
+    throw new Error("Host SDK V3 manifest must declare nativeCapabilities");
+  }
+  if (manifest.sdkVersion < 3 && manifest.nativeCapabilities !== undefined) {
+    throw new Error("nativeCapabilities require Host SDK V3");
+  }
   parseVersion(manifest.version, "manifest version");
 }
 
