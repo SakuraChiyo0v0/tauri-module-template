@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Runtime Module Development Host</title>
+    <style>
+      :root { --foreground: #111827; --muted-foreground: #6b7280; --card: #fff; --border: #d1d5db; --primary: #111827; --primary-foreground: #fff; background: #f3f4f6; }
+      :root[data-theme="dark"] { --foreground: #f9fafb; --muted-foreground: #9ca3af; --card: #111827; --border: #374151; --primary: #f9fafb; --primary-foreground: #111827; background: #030712; }
+      body { margin: 0; color: var(--foreground); font: 14px/1.5 system-ui, sans-serif; }
+      main { width: min(840px, calc(100% - 40px)); margin: 40px auto; }
+      header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+      h1 { margin: 0; font-size: 24px; }
+      .actions { display: flex; gap: 8px; }
+      .actions button { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--foreground); background: var(--card); cursor: pointer; }
+      pre { min-height: 80px; padding: 16px; overflow: auto; border: 1px solid var(--border); border-radius: 12px; color: var(--foreground); background: var(--card); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div><h1>Mock Host SDK V1</h1><div>Browser-only development preview. Native capabilities are intentionally unavailable.</div></div>
+        <div class="actions"><button id="toggle-details">Toggle details</button><button id="toggle-theme">Toggle theme</button></div>
+      </header>
+      <section id="module-root"></section>
+      <h2>Module logs</h2>
+      <pre id="logs"></pre>
+    </main>
+    <script type="module" src="/src/dev.ts"></script>
+  </body>
+</html>

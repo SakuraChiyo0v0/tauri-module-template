@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "starter-module",
+  "name": "Starter Module",
+  "description": "Business-neutral standalone runtime module starter.",
+  "version": "0.1.0",
+  "hostVersion": ">=0.2.0, <0.3.0",
+  "sdkVersion": 2,
+  "entry": "index.js",
+  "dependencies": {
+    "required": [],
+    "optional": []
+  },
+  "navigation": [
+    {
+      "id": "starter-module-home",
+      "title": "Starter Module",
+      "description": "Standalone runtime module development check.",
+      "element": "starter-module-page",
+      "group": "main",
+      "order": 200
+    }
+  ],
+  "settings": [
+    {
+      "id": "showDetails",
+      "type": "switch",
+      "group": "starter-module",
+      "order": 10,
+      "label": "Show module details",
+      "description": "Updates the module page through namespaced Host SDK settings.",
+      "defaultValue": true
+    }
+  ]
+}
