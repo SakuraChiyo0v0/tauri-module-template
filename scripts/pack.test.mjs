@@ -102,6 +102,107 @@ describe("module packer", () => {
     await expect(packModule(root)).rejects.toThrow(/Host SDK V5/i);
   });
 
+  it("accepts Host SDK V6 manifests with the existing repository permission declaration", async () => {
+    const root = await fixture();
+    const manifestPath = path.join(root, "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.sdkVersion = 6;
+    manifest.services = { provides: [] };
+    manifest.nativeCapabilities = {
+      filesystem: { private: false, external: ["read", "list"] },
+      process: null,
+      registry: [],
+      tray: [],
+      shortcuts: [],
+      moduleRepository: { install: true },
+    };
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await expect(packModule(root)).resolves.toMatch(/\.mtp$/);
+  });
+
+  it("accepts Host SDK V7 event declarations and rejects invalid or misplaced events", async () => {
+    const root = await fixture();
+    const manifestPath = path.join(root, "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.sdkVersion = 7;
+    manifest.services = { provides: [] };
+    manifest.events = { publishes: ["starter.changed.v1"], subscribes: ["starter.changed.v1", "market.updated.v1"] };
+    manifest.nativeCapabilities = { filesystem: null, process: null, registry: [], tray: [], shortcuts: [] };
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await expect(packModule(root)).resolves.toMatch(/\.mtp$/);
+
+    manifest.events = { publishes: ["starter.changed.v1", "starter.changed.v1"] };
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await expect(packModule(root)).rejects.toThrow(/event id/i);
+
+    manifest.events = { publishes: ["Invalid Event"] };
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await expect(packModule(root)).rejects.toThrow(/event id/i);
+
+    manifest.events = { streams: ["starter.changed.v1"] };
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await expect(packModule(root)).rejects.toThrow(/events declaration/i);
+
+    manifest.sdkVersion = 6;
+    manifest.events = { publishes: ["starter.changed.v1"] };
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await expect(packModule(root)).rejects.toThrow(/Host SDK V7/i);
+  });
+
+  it("accepts Host SDK V8 notifications and rejects them on older SDKs", async () => {
+    const root = await fixture();
+    const manifestPath = path.join(root, "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.sdkVersion = 8;
+    manifest.services = { provides: [] };
+    manifest.events = { publishes: [], subscribes: [] };
+    manifest.nativeCapabilities = { filesystem: null, process: null, registry: [], tray: [], shortcuts: [], notifications: { system: true } };
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await expect(packModule(root)).resolves.toMatch(/\.mtp$/);
+
+    manifest.nativeCapabilities.notifications = { system: false };
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await expect(packModule(root)).rejects.toThrow(/notifications require Host SDK V8|notifications capability/i);
+
+    manifest.sdkVersion = 7;
+    manifest.nativeCapabilities.notifications = { system: true };
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await expect(packModule(root)).rejects.toThrow(/notifications require Host SDK V8|notifications capability/i);
+  });
+
+  it("validates Host SDK V10 clipboard and V12 HTTP declarations", async () => {
+    const root = await fixture();
+    const manifestPath = path.join(root, "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.sdkVersion = 10;
+    manifest.services = { provides: [] };
+    manifest.events = { publishes: [], subscribes: [] };
+    manifest.nativeCapabilities = {
+      filesystem: null, process: null, registry: [], tray: [], shortcuts: [], clipboard: { text: true },
+    };
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await expect(packModule(root)).resolves.toMatch(/\.mtp$/);
+
+    manifest.sdkVersion = 9;
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await expect(packModule(root)).rejects.toThrow(/clipboard.*V10/i);
+
+    manifest.sdkVersion = 12;
+    manifest.nativeCapabilities = {
+      filesystem: null, process: null, registry: [], tray: [], shortcuts: [], http: { origins: ["https://api.example.com"] },
+    };
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await expect(packModule(root)).resolves.toMatch(/\.mtp$/);
+
+    manifest.nativeCapabilities.http.origins = ["https://api.example.com", "https://api.example.com"];
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await expect(packModule(root)).rejects.toThrow(/duplicate http origin/i);
+
+    manifest.sdkVersion = 11;
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await expect(packModule(root)).rejects.toThrow(/http proxy requires Host SDK V12/i);
+  });
+
   it("overrides the artifact version without rewriting the source manifest", async () => {
     const root = await fixture();
 

@@ -132,8 +132,8 @@ async function collectAssets(root, relativeDirectory = "assets") {
 }
 
 function validateManifest(manifest) {
-  if (manifest?.schemaVersion !== 2 || ![2, 3, 4, 5].includes(manifest?.sdkVersion) || manifest?.entry !== "index.js") {
-    throw new Error("manifest must use schemaVersion 2, Host SDK V2, V3, V4 or V5, and entry index.js");
+  if (manifest?.schemaVersion !== 2 || ![2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].includes(manifest?.sdkVersion) || manifest?.entry !== "index.js") {
+    throw new Error("manifest must use schemaVersion 2, Host SDK V2 through V12, and entry index.js");
   }
   if (!MODULE_ID_PATTERN.test(manifest.id)) throw new Error(`invalid module id: ${manifest.id}`);
   validateLocalizedText(manifest.name, "module name");
@@ -150,12 +150,38 @@ function validateManifest(manifest) {
     }
   }
   if (manifest.sdkVersion >= 3 && (!manifest.nativeCapabilities || typeof manifest.nativeCapabilities !== "object" || Array.isArray(manifest.nativeCapabilities))) {
-    throw new Error("Host SDK V3-V5 manifest must declare nativeCapabilities");
+    throw new Error("Host SDK V3-V12 manifest must declare nativeCapabilities");
   }
   if (manifest.sdkVersion < 3 && manifest.nativeCapabilities !== undefined) {
     throw new Error("nativeCapabilities require Host SDK V3");
   }
   if (manifest.sdkVersion < 4 && manifest.services !== undefined) throw new Error("module services require Host SDK V4");
+  if (manifest.sdkVersion < 7 && manifest.events !== undefined) throw new Error("module events require Host SDK V7");
+  if (manifest.nativeCapabilities?.notifications != null) {
+    const notifications = manifest.nativeCapabilities.notifications;
+    if (manifest.sdkVersion < 8 || typeof notifications !== "object" || Array.isArray(notifications)
+      || Object.keys(notifications).some((key) => key !== "system") || notifications.system !== true) {
+      throw new Error("module notifications require Host SDK V8");
+    }
+  }
+  if (manifest.nativeCapabilities?.clipboard != null) {
+    const clipboard = manifest.nativeCapabilities.clipboard;
+    if (manifest.sdkVersion < 10 || typeof clipboard !== "object" || Array.isArray(clipboard)
+      || Object.keys(clipboard).some((key) => key !== "text") || clipboard.text !== true) {
+      throw new Error("module clipboard access requires Host SDK V10");
+    }
+  }
+  if (manifest.nativeCapabilities?.http != null) {
+    const http = manifest.nativeCapabilities.http;
+    if (manifest.sdkVersion < 12 || typeof http !== "object" || Array.isArray(http)
+      || Object.keys(http).some((key) => key !== "origins") || !Array.isArray(http.origins)
+      || http.origins.some((origin) => typeof origin !== "string" || !origin.startsWith("https://"))) {
+      throw new Error("module http proxy requires Host SDK V12 and https origins");
+    }
+    if (new Set(http.origins).size !== http.origins.length) {
+      throw new Error("duplicate http origin");
+    }
+  }
   if (manifest.nativeCapabilities?.moduleRepository != null) {
     const repository = manifest.nativeCapabilities.moduleRepository;
     if (manifest.sdkVersion < 5 || typeof repository !== "object" || Array.isArray(repository)
@@ -175,6 +201,23 @@ function validateManifest(manifest) {
         throw new Error(`invalid or duplicate service id: ${serviceId}`);
       }
       serviceIds.add(serviceId);
+    }
+  }
+  if (manifest.events !== undefined) {
+    if (!manifest.events || typeof manifest.events !== "object" || Array.isArray(manifest.events)
+      || Object.keys(manifest.events).some((key) => key !== "publishes" && key !== "subscribes")) {
+      throw new Error("invalid module events declaration");
+    }
+    for (const [kind, eventList] of [["publishes", manifest.events.publishes ?? []], ["subscribes", manifest.events.subscribes ?? []]]) {
+      if (!Array.isArray(eventList)) throw new Error("invalid module events declaration");
+      const seenEventIds = new Set();
+      for (const eventId of eventList) {
+        if (typeof eventId !== "string" || !SERVICE_ID_PATTERN.test(eventId) || seenEventIds.has(eventId)) {
+          throw new Error(`invalid or duplicate event id: ${eventId}`);
+        }
+        seenEventIds.add(eventId);
+      }
+      void kind;
     }
   }
   for (const [index, item] of (manifest.nativeCapabilities?.tray ?? []).entries()) {

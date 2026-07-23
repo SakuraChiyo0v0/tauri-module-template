@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { activate, deactivate } from "./module";
 import type { NativePermissionSummary, RuntimeModuleHostSdkV12, RuntimeSqlValue, SupportedLocale, ThemeState } from "./sdk";
 
@@ -194,6 +196,14 @@ describe("standalone starter module", () => {
     expect(summaries).toHaveLength(3);
   });
 
+  it("redacts clipboard values and HTTP URLs in the development host logs", async () => {
+    const source = await readFile(path.join(process.cwd(), "src", "dev.ts"), "utf8");
+
+    expect(source).toContain("Mock clipboard write requested");
+    expect(source).toContain("Mock http fetch requested");
+    expect(source).not.toContain("Mock clipboard write: ${text}");
+    expect(source).not.toContain("Mock http fetch: ${options.url}");
+  });
 
   it("activates with Host SDK V12, registers its service and event subscription, and verifies private storage", async () => {
     const host = hostSdk();

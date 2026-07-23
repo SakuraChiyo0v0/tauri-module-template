@@ -183,7 +183,7 @@ const hostSdk: RuntimeModuleHostSdkV12 = {
   },
   clipboard: {
     async readText() { log("info", "Mock clipboard read"); return "starter-module"; },
-    async writeText(text: string) { log("info", `Mock clipboard write: ${text}`); },
+    async writeText(_text: string) { log("info", "Mock clipboard write requested"); },
   },
   dialogs: {
     async confirm(options) { log("info", `Mock confirm: ${options.title}`); return true; },
@@ -191,7 +191,8 @@ const hostSdk: RuntimeModuleHostSdkV12 = {
   },
   http: {
     async fetch(options) {
-      log("info", `Mock http fetch: ${options.url}`);
+      void options;
+      log("info", "Mock http fetch requested");
       return { status: 200, headers: [["content-type", "text/plain"]], body: [104, 105], truncated: false };
     },
   },
