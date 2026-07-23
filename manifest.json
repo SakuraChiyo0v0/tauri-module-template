@@ -8,7 +8,7 @@
   },
   "version": "0.1.0",
   "hostVersion": ">=0.2.0, <0.3.0",
-  "sdkVersion": 4,
+  "sdkVersion": 5,
   "entry": "index.js",
   "dependencies": {
     "required": [],
@@ -47,6 +47,7 @@
     ],
     "shortcuts": [
       { "id": "show-main", "description": { "zh-CN": "显示模块页面", "en": "Show the module page" }, "accelerator": "Ctrl+Shift+M" }
-    ]
+    ],
+    "moduleRepository": null
   }
 }

@@ -1,6 +1,6 @@
 # Modular Tauri Runtime Module Template
 
-一个与桌面底座源码完全分离的 `.mtp` 模块开发模板。它提供 schema V2 双语清单、Host SDK V4 类型、中英文语言订阅、模块服务、浏览器模拟宿主、模块隔离 SQLite、私有文件与用户授权程序示例、原生 Web Component、测试、单文件 ESM 构建和确定性打包。
+一个与桌面底座源码完全分离的 `.mtp` 模块开发模板。它提供 schema V2 双语清单、Host SDK V5 类型、中英文语言订阅、模块服务、受限本地仓库 API、浏览器模拟宿主、模块隔离 SQLite、私有文件与用户授权程序示例、原生 Web Component、测试、单文件 ESM 构建和确定性打包。
 
 ## 开始开发
 
@@ -32,7 +32,7 @@ pnpm module:pack -- --version 0.1.1
 2. 所有自定义元素名称必须以模块 ID 开头。
 3. 在 `src/module.ts` 中实现页面和 `activate(hostSdk)`，复杂功能可以拆到同一 `src` 目录。
 4. npm 依赖由 Vite 打进 `build/index.js`；只有其他 `.mtp` 模块才写入 `dependencies`。
-5. 只使用 `src/sdk.ts` 声明的 Host SDK V4 能力和语义 CSS 变量；在 `nativeCapabilities` 中按最小权限声明实际所需能力。
+5. 只使用 `src/sdk.ts` 声明的 Host SDK V5 能力和语义 CSS 变量；在 `nativeCapabilities` 中按最小权限声明实际所需能力。
 6. 使用数据库参数占位符，通过 `getUserVersion()` / `setUserVersion()` 管理迁移，并把关联修改放进 `transaction()`。
 7. 在 `services.provides` 声明本模块提供的版本化服务；消费者只能通过 `services.call()` 调用 `dependencies` 中的模块，并只传递 JSON 兼容值。
 8. 通过 `hostSdk.logger` 记录生命周期和关键操作的最终结果：成功使用 `info`，无效输入、缺少依赖等可恢复结果使用 `warn`，意外失败使用 `error`。日志只写稳定操作名和必要的非敏感结果，不得包含正文、凭据、完整 URL、文件路径、服务负载或原始错误消息。
@@ -40,4 +40,6 @@ pnpm module:pack -- --version 0.1.1
 
 模块页面正文不由底座翻译。模块应使用自己的双语词典，初始渲染读取 `hostSdk.i18n.getLocale()`，并通过 `hostSdk.i18n.subscribe()` 在语言变化时重新渲染。打包器会拒绝任一宿主可见文本缺少中文或英文的清单。
 
-每个模块只能访问自己的 SQLite 文件。模块依赖保证兼容版本和 provider 优先启动；SDK V4 服务调用仍不能绕过依赖关系，也不能直接访问另一个模块数据库。文件、进程、注册表、托盘和快捷键必须经过 Host SDK 代理；文件授权只使用不透明 grant ID，不能读取真实路径。`process.openPath()` / `process.revealInFolder()` 只接受可读文件 grant ID，`process.run()` 只接受可执行文件 grant ID。需要共享新的系统能力时，应先为底座提出版本化 Host SDK 变更。
+每个模块只能访问自己的 SQLite 文件。模块依赖保证兼容版本和 provider 优先启动；SDK V4/V5 服务调用仍不能绕过依赖关系，也不能直接访问另一个模块数据库。文件、进程、注册表、托盘和快捷键必须经过 Host SDK 代理；文件授权只使用不透明 grant ID，不能读取真实路径。`process.openPath()` / `process.revealInFolder()` 只接受可读文件 grant ID，`process.run()` 只接受可执行文件 grant ID。需要共享新的系统能力时，应先为底座提出版本化 Host SDK 变更。
+
+SDK V5 的 `moduleRepository` 只供确实需要管理本地 `.mtp` 的模块使用。清单必须同时声明外部目录 `read`/`list` 与 `moduleRepository.install`，模块只能保存 grant ID、扫描顶层包并按文件名安装；不得记录真实目录、读取包内容或绕过宿主校验。通用起步清单默认将该能力设为 `null`。

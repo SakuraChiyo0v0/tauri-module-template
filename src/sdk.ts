@@ -2,6 +2,7 @@ export type LogLevel = "trace" | "debug" | "info" | "warn" | "error";
 export type ColorMode = "system" | "light" | "dark";
 export type ThemePresetId = "neutral" | "ocean";
 export type SupportedLocale = "zh-CN" | "en";
+export type LocalizedText = { "zh-CN": string; en: string };
 
 export interface ThemeState {
   mode: ColorMode;
@@ -41,8 +42,70 @@ export type RuntimeServiceHandler = (
   input: RuntimeServiceValue,
 ) => RuntimeServiceValue | Promise<RuntimeServiceValue>;
 
-export interface RuntimeModuleHostSdkV4 {
-  readonly sdkVersion: 4;
+export interface RuntimeFileGrant {
+  id: string;
+  moduleId: string;
+  displayName: string;
+  kind: "file" | "directory" | "executable";
+  access: { read: boolean; write: boolean; list: boolean; execute: boolean };
+}
+
+export type NativePermissionSummary =
+  | { kind: "private_filesystem" }
+  | { kind: "external_filesystem"; access: string[] }
+  | { kind: "url_schemes"; schemes: string[] }
+  | { kind: "executable_grants" }
+  | { kind: "registry"; hive: string; key: string; access: "read" | "read_write" }
+  | { kind: "tray"; count: number }
+  | { kind: "shortcuts"; count: number }
+  | { kind: "module_repository_install" };
+
+export interface RuntimeModuleManifest {
+  schemaVersion: 2;
+  id: string;
+  name: LocalizedText;
+  description: LocalizedText;
+  version: string;
+  hostVersion: string;
+  sdkVersion: 2 | 3 | 4 | 5;
+  entry: "index.js";
+  dependencies: {
+    required: Array<{ id: string; version: string }>;
+    optional: Array<{ id: string; version: string }>;
+  };
+  services?: { provides: string[] };
+  navigation: Array<{
+    id: string;
+    title: LocalizedText;
+    description?: LocalizedText;
+    element: string;
+    group?: "main" | "system";
+    order?: number;
+  }>;
+  settings: unknown[];
+  nativeCapabilities?: unknown;
+}
+
+export interface RuntimeModuleRepositoryPackage {
+  fileName: string;
+  manifest: RuntimeModuleManifest | null;
+  installedVersion: string | null;
+  status: "not_installed" | "update_available" | "installed" | "older_version" | "invalid";
+  permissionSummary: NativePermissionSummary[];
+  error: string | null;
+}
+
+export interface RuntimeModuleRepositoryInstallResult {
+  moduleId: string;
+  version: string;
+  selectedVersion: string | null;
+  status: "active" | "disabled" | "waiting" | "blocked";
+  packageInstalled: boolean;
+  planChanged: boolean;
+}
+
+export interface RuntimeModuleHostSdkV5 {
+  readonly sdkVersion: 5;
   readonly hostVersion: string;
   readonly module: {
     readonly id: string;
@@ -72,12 +135,7 @@ export interface RuntimeModuleHostSdkV4 {
   readonly filesystem: {
     readPrivate(path: string): Promise<number[]>;
     writePrivate(path: string, data: number[]): Promise<number>;
-    listGrants(): Promise<Array<{
-      id: string;
-      displayName: string;
-      kind: "file" | "directory" | "executable";
-      access: { read: boolean; write: boolean; list: boolean; execute: boolean };
-    }>>;
+    listGrants(): Promise<RuntimeFileGrant[]>;
     readGrant(grantId: string): Promise<number[]>;
     writeGrant(grantId: string, data: number[]): Promise<number>;
     listDirectory(grantId: string): Promise<Array<{ name: string; kind: "file" | "directory" | "executable" }>>;
@@ -116,9 +174,14 @@ export interface RuntimeModuleHostSdkV4 {
       input?: RuntimeServiceValue,
     ): Promise<T>;
   };
+  readonly moduleRepository: {
+    chooseDirectory(): Promise<RuntimeFileGrant | null>;
+    scan(grantId: string): Promise<RuntimeModuleRepositoryPackage[]>;
+    install(grantId: string, fileName: string): Promise<RuntimeModuleRepositoryInstallResult>;
+  };
 }
 
 export interface RuntimeModuleExports {
-  activate(hostSdk: RuntimeModuleHostSdkV4): void | Promise<void>;
+  activate(hostSdk: RuntimeModuleHostSdkV5): void | Promise<void>;
   deactivate?(): void | Promise<void>;
 }

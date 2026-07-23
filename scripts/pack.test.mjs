@@ -81,6 +81,27 @@ describe("module packer", () => {
     await expect(packModule(root)).rejects.toThrow(/service/i);
   });
 
+  it("accepts SDK V5 repository access and rejects it on older SDKs", async () => {
+    const root = await fixture();
+    const manifestPath = path.join(root, "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    manifest.sdkVersion = 5;
+    manifest.nativeCapabilities = {
+      filesystem: { private: false, external: ["read", "list"] },
+      process: null,
+      registry: [],
+      tray: [],
+      shortcuts: [],
+      moduleRepository: { install: true },
+    };
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await expect(packModule(root)).resolves.toMatch(/\.mtp$/);
+
+    manifest.sdkVersion = 4;
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await expect(packModule(root)).rejects.toThrow(/Host SDK V5/i);
+  });
+
   it("overrides the artifact version without rewriting the source manifest", async () => {
     const root = await fixture();
 

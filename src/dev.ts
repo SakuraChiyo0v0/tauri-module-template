@@ -1,7 +1,7 @@
 import { activate } from "./module";
 import type {
   LogLevel,
-  RuntimeModuleHostSdkV4,
+  RuntimeModuleHostSdkV5,
   RuntimeServiceHandler,
   RuntimeSqlValue,
   SupportedLocale,
@@ -47,8 +47,8 @@ function writeDatabase(value: ReturnType<typeof readDatabase>) {
   localStorage.setItem(databaseKey, JSON.stringify(value));
 }
 
-const hostSdk: RuntimeModuleHostSdkV4 = {
-  sdkVersion: 4,
+const hostSdk: RuntimeModuleHostSdkV5 = {
+  sdkVersion: 5,
   hostVersion: "0.2.0-dev",
   module: { id: "starter-module", version: "0.1.0-dev" },
   logger: {
@@ -147,6 +147,49 @@ const hostSdk: RuntimeModuleHostSdkV4 = {
     available() { return false; },
     async call(providerModuleId: string, serviceId: string, method: string) {
       throw new Error(`Mock dependency service is unavailable: ${providerModuleId}/${serviceId}.${method}`);
+    },
+  },
+  moduleRepository: {
+    async chooseDirectory() {
+      return {
+        id: "mock-repository-grant",
+        moduleId: "starter-module",
+        displayName: "mock-module-market",
+        kind: "directory",
+        access: { read: true, write: false, list: true, execute: false },
+      };
+    },
+    async scan() {
+      return [{
+        fileName: "sample-module-0.1.0.mtp",
+        manifest: {
+          schemaVersion: 2,
+          id: "sample-module",
+          name: { "zh-CN": "示例模块", en: "Sample Module" },
+          description: { "zh-CN": "浏览器预览数据", en: "Browser preview data" },
+          version: "0.1.0",
+          hostVersion: ">=0.2.0, <0.3.0",
+          sdkVersion: 5,
+          entry: "index.js",
+          dependencies: { required: [], optional: [] },
+          navigation: [],
+          settings: [],
+        },
+        installedVersion: null,
+        status: "not_installed",
+        permissionSummary: [],
+        error: null,
+      }];
+    },
+    async install(_grantId, _fileName) {
+      return {
+        moduleId: "sample-module",
+        version: "0.1.0",
+        selectedVersion: "0.1.0",
+        status: "active",
+        packageInstalled: true,
+        planChanged: true,
+      };
     },
   },
 };

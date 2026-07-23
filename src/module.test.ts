@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { activate, deactivate } from "./module";
-import type { RuntimeModuleHostSdkV4, RuntimeSqlValue, SupportedLocale, ThemeState } from "./sdk";
+import type { RuntimeModuleHostSdkV5, RuntimeSqlValue, SupportedLocale, ThemeState } from "./sdk";
 
 function hostSdk() {
   let showDetails = true;
@@ -27,8 +27,8 @@ function hostSdk() {
   const select = vi.fn();
   const privateFiles = new Map<string, number[]>();
   const expose = vi.fn(() => () => undefined);
-  const sdk: RuntimeModuleHostSdkV4 = {
-    sdkVersion: 4,
+  const sdk: RuntimeModuleHostSdkV5 = {
+    sdkVersion: 5,
     hostVersion: "0.2.0",
     module: { id: "starter-module", version: "0.1.0" },
     logger,
@@ -92,6 +92,24 @@ function hostSdk() {
       available: vi.fn(() => false),
       async call() { throw new Error("Mock dependency service is unavailable"); },
     },
+    moduleRepository: {
+      chooseDirectory: vi.fn(async () => ({
+        id: "repository-grant",
+        moduleId: "starter-module",
+        displayName: "module-market",
+        kind: "directory" as const,
+        access: { read: true, write: false, list: true, execute: false },
+      })),
+      scan: vi.fn(async () => []),
+      install: vi.fn(async () => ({
+        moduleId: "sample-module",
+        version: "0.1.0",
+        selectedVersion: "0.1.0",
+        status: "active" as const,
+        packageInstalled: true,
+        planChanged: true,
+      })),
+    },
   };
   return {
     sdk,
@@ -115,7 +133,7 @@ afterEach(async () => {
 });
 
 describe("standalone starter module", () => {
-  it("activates with Host SDK V4, registers its service and verifies private storage", async () => {
+  it("activates with Host SDK V5, registers its service and verifies private storage", async () => {
     const host = hostSdk();
 
     await activate(host.sdk);
@@ -131,10 +149,22 @@ describe("standalone starter module", () => {
     expect(host.services.expose).toHaveBeenCalledWith("starter.v1", expect.objectContaining({ ping: expect.any(Function) }));
   });
 
+  it("provides a typed mock repository boundary for browser development", async () => {
+    const host = hostSdk();
+    const grant = await host.sdk.moduleRepository.chooseDirectory();
+    if (!grant) throw new Error("expected mock repository grant");
+    await host.sdk.moduleRepository.scan(grant.id);
+    await host.sdk.moduleRepository.install(grant.id, "sample-module-0.1.0.mtp");
+
+    expect(host.sdk.moduleRepository.scan).toHaveBeenCalledWith("repository-grant");
+    expect(host.sdk.moduleRepository.install).toHaveBeenCalledWith("repository-grant", "sample-module-0.1.0.mtp");
+  });
+
   it("runs only an executable selected through an opaque grant", async () => {
     const host = hostSdk();
     vi.mocked(host.sdk.filesystem.listGrants).mockResolvedValue([{
       id: "grant-1",
+      moduleId: "starter-module",
       displayName: "whoami.exe",
       kind: "executable",
       access: { read: false, write: false, list: false, execute: true },
@@ -169,6 +199,7 @@ describe("standalone starter module", () => {
     const host = hostSdk();
     vi.mocked(host.sdk.filesystem.listGrants).mockResolvedValue([{
       id: "grant-secret",
+      moduleId: "starter-module",
       displayName: "private-tool.exe",
       kind: "executable",
       access: { read: false, write: false, list: false, execute: true },

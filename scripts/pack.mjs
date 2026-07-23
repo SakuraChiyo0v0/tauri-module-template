@@ -132,8 +132,8 @@ async function collectAssets(root, relativeDirectory = "assets") {
 }
 
 function validateManifest(manifest) {
-  if (manifest?.schemaVersion !== 2 || ![2, 3, 4].includes(manifest?.sdkVersion) || manifest?.entry !== "index.js") {
-    throw new Error("manifest must use schemaVersion 2, Host SDK V2, V3 or V4, and entry index.js");
+  if (manifest?.schemaVersion !== 2 || ![2, 3, 4, 5].includes(manifest?.sdkVersion) || manifest?.entry !== "index.js") {
+    throw new Error("manifest must use schemaVersion 2, Host SDK V2, V3, V4 or V5, and entry index.js");
   }
   if (!MODULE_ID_PATTERN.test(manifest.id)) throw new Error(`invalid module id: ${manifest.id}`);
   validateLocalizedText(manifest.name, "module name");
@@ -150,12 +150,19 @@ function validateManifest(manifest) {
     }
   }
   if (manifest.sdkVersion >= 3 && (!manifest.nativeCapabilities || typeof manifest.nativeCapabilities !== "object" || Array.isArray(manifest.nativeCapabilities))) {
-    throw new Error("Host SDK V3/V4 manifest must declare nativeCapabilities");
+    throw new Error("Host SDK V3-V5 manifest must declare nativeCapabilities");
   }
   if (manifest.sdkVersion < 3 && manifest.nativeCapabilities !== undefined) {
     throw new Error("nativeCapabilities require Host SDK V3");
   }
   if (manifest.sdkVersion < 4 && manifest.services !== undefined) throw new Error("module services require Host SDK V4");
+  if (manifest.nativeCapabilities?.moduleRepository != null) {
+    const repository = manifest.nativeCapabilities.moduleRepository;
+    if (manifest.sdkVersion < 5 || typeof repository !== "object" || Array.isArray(repository)
+      || Object.keys(repository).some((key) => key !== "install") || repository.install !== true) {
+      throw new Error("module repository install access requires Host SDK V5");
+    }
+  }
   if (manifest.services !== undefined) {
     if (!manifest.services || typeof manifest.services !== "object" || Array.isArray(manifest.services)
       || Object.keys(manifest.services).some((key) => key !== "provides")
