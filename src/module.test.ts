@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { activate, deactivate } from "./module";
-import type { RuntimeModuleHostSdkV5, RuntimeSqlValue, SupportedLocale, ThemeState } from "./sdk";
+import type { NativePermissionSummary, RuntimeModuleHostSdkV12, RuntimeSqlValue, SupportedLocale, ThemeState } from "./sdk";
 
 function hostSdk() {
   let showDetails = true;
@@ -10,6 +10,7 @@ function hostSdk() {
   const settingListeners = new Set<() => void>();
   const themeListeners = new Set<(value: ThemeState) => void>();
   const localeListeners = new Set<(value: SupportedLocale) => void>();
+  const eventListeners = new Set<(event: { eventId: string; payload: unknown }) => void>();
   let locale: SupportedLocale = "zh-CN";
   const logger = {
     trace: vi.fn(async () => undefined),
@@ -27,9 +28,27 @@ function hostSdk() {
   const select = vi.fn();
   const privateFiles = new Map<string, number[]>();
   const expose = vi.fn(() => () => undefined);
-  const sdk: RuntimeModuleHostSdkV5 = {
-    sdkVersion: 5,
-    hostVersion: "0.2.0",
+  const publish = vi.fn((eventId: string, payload?: unknown) => {
+    queueMicrotask(() => {
+      eventListeners.forEach((listener) => listener({ eventId, payload: payload ?? null }));
+    });
+  });
+  const subscribe = vi.fn((eventId: string, listener: (event: { eventId: string; payload: unknown }) => void) => {
+    if (eventId !== "starter.changed.v1") throw new Error(`Mock event ${eventId} is not declared.`);
+    eventListeners.add(listener);
+    return () => eventListeners.delete(listener);
+  });
+  const showNotification = vi.fn(async () => undefined);
+  const exportBackup = vi.fn(async () => ({ grantId: "starter-module:backup.mtbk:64", displayName: "backup.mtbk", size: 64 }));
+  const importBackup = vi.fn(async () => undefined);
+  const readClipboard = vi.fn(async () => "starter-module");
+  const writeClipboard = vi.fn(async () => undefined);
+  const confirmDialog = vi.fn(async () => true);
+  const promptDialog = vi.fn(async () => "answer");
+  const fetchHttp = vi.fn(async () => ({ status: 200, headers: [["content-type", "text/plain"]] as Array<[string, string]>, body: [104, 105], truncated: false }));
+  const sdk: RuntimeModuleHostSdkV12 = {
+    sdkVersion: 12,
+    hostVersion: "0.3.0",
     module: { id: "starter-module", version: "0.1.0" },
     logger,
     settings: {
@@ -92,6 +111,12 @@ function hostSdk() {
       available: vi.fn(() => false),
       async call() { throw new Error("Mock dependency service is unavailable"); },
     },
+    events: { publish, subscribe },
+    notifications: { show: showNotification },
+    data: { exportBackup, importBackup },
+    clipboard: { readText: readClipboard, writeText: writeClipboard },
+    dialogs: { confirm: confirmDialog, prompt: promptDialog },
+    http: { fetch: fetchHttp },
     moduleRepository: {
       chooseDirectory: vi.fn(async () => ({
         id: "repository-grant",
@@ -109,6 +134,26 @@ function hostSdk() {
         packageInstalled: true,
         planChanged: true,
       })),
+      previewInstallPlan: vi.fn(async (_grantId, fileName) => ({
+        planId: `plan:${fileName}`,
+        targetModuleId: "sample-module",
+        targetVersion: "0.1.0",
+        executable: !fileName.includes("blocked"),
+        entries: [],
+        activationOrder: [],
+        diagnostics: fileName.includes("blocked") ? [{
+          code: "missing_dependency",
+          moduleId: "sample-module",
+          dependencyId: "missing-module",
+          requiredVersion: "^1.0.0",
+          availableVersions: [],
+          relatedModules: [],
+        }] : [],
+      })),
+      executeInstallPlan: vi.fn(async (_grantId, planId) => {
+        if (planId.includes("stale")) throw new Error("stale_plan");
+        return { targetModuleId: "sample-module", planChanged: true, modules: [] };
+      }),
     },
   };
   return {
@@ -116,6 +161,12 @@ function hostSdk() {
     logger,
     database: { execute, select, transaction },
     services: { expose },
+    events: { publish, subscribe },
+    notifications: { show: showNotification },
+    data: { exportBackup, importBackup },
+    clipboard: { readText: readClipboard, writeText: writeClipboard },
+    dialogs: { confirm: confirmDialog, prompt: promptDialog },
+    http: { fetch: fetchHttp },
     setTheme(next: ThemeState) {
       theme = next;
       themeListeners.forEach((listener) => listener(theme));
@@ -133,7 +184,18 @@ afterEach(async () => {
 });
 
 describe("standalone starter module", () => {
-  it("activates with Host SDK V5, registers its service and verifies private storage", async () => {
+  it("keeps V8-V12 native permission summaries representable in the SDK snapshot", () => {
+    const summaries: NativePermissionSummary[] = [
+      { kind: "notifications" },
+      { kind: "clipboard" },
+      { kind: "http", origins: ["https://example.com"] },
+    ];
+
+    expect(summaries).toHaveLength(3);
+  });
+
+
+  it("activates with Host SDK V12, registers its service and event subscription, and verifies private storage", async () => {
     const host = hostSdk();
 
     await activate(host.sdk);
@@ -147,6 +209,67 @@ describe("standalone starter module", () => {
     expect(host.sdk.tray.onAction).toHaveBeenCalledOnce();
     expect(host.sdk.shortcuts.onTrigger).toHaveBeenCalledOnce();
     expect(host.services.expose).toHaveBeenCalledWith("starter.v1", expect.objectContaining({ ping: expect.any(Function) }));
+    expect(host.events.subscribe).toHaveBeenCalledWith("starter.changed.v1", expect.any(Function));
+  });
+
+  it("publishes a starter change event when a record is stored and the subscription receives it", async () => {
+    const host = hostSdk();
+    await activate(host.sdk);
+    const page = document.createElement("starter-module-page");
+    document.body.append(page);
+    await vi.waitFor(() => expect(page.shadowRoot?.textContent).toContain("SQLite"));
+
+    page.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="database"]')?.click();
+    await vi.waitFor(() => expect(host.events.publish).toHaveBeenCalledWith("starter.changed.v1", expect.objectContaining({ kind: "record" })));
+    await vi.waitFor(() => expect(host.logger.info).toHaveBeenCalledWith("Starter change event received"));
+  });
+
+  it("sends a system notification through the Host SDK and logs the outcome", async () => {
+    const host = hostSdk();
+    await activate(host.sdk);
+    const page = document.createElement("starter-module-page");
+    document.body.append(page);
+    await vi.waitFor(() => expect(page.shadowRoot?.textContent).toContain("SQLite"));
+
+    page.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="notify"]')?.click();
+    await vi.waitFor(() => expect(host.notifications.show).toHaveBeenCalledWith(expect.objectContaining({ body: expect.any(String) })));
+    await vi.waitFor(() => expect(host.logger.info).toHaveBeenCalledWith("System notification sent"));
+  });
+
+  it("writes module text to the clipboard through the Host SDK", async () => {
+    const host = hostSdk();
+    await activate(host.sdk);
+    const page = document.createElement("starter-module-page");
+    document.body.append(page);
+    await vi.waitFor(() => expect(page.shadowRoot?.textContent).toContain("SQLite"));
+
+    page.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="copy"]')?.click();
+    await vi.waitFor(() => expect(host.clipboard.writeText).toHaveBeenCalledWith("starter-module"));
+    await vi.waitFor(() => expect(host.logger.info).toHaveBeenCalledWith("Module id copied to clipboard"));
+  });
+
+  it("opens a confirm dialog through the Host SDK and logs the result", async () => {
+    const host = hostSdk();
+    await activate(host.sdk);
+    const page = document.createElement("starter-module-page");
+    document.body.append(page);
+    await vi.waitFor(() => expect(page.shadowRoot?.textContent).toContain("SQLite"));
+
+    page.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="confirm"]')?.click();
+    await vi.waitFor(() => expect(host.dialogs.confirm).toHaveBeenCalledWith(expect.objectContaining({ title: expect.any(String) })));
+    await vi.waitFor(() => expect(host.logger.info).toHaveBeenCalledWith("User confirmed dialog"));
+  });
+
+  it("fetches a declared origin through the Host SDK and logs the status", async () => {
+    const host = hostSdk();
+    await activate(host.sdk);
+    const page = document.createElement("starter-module-page");
+    document.body.append(page);
+    await vi.waitFor(() => expect(page.shadowRoot?.textContent).toContain("SQLite"));
+
+    page.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="fetch"]')?.click();
+    await vi.waitFor(() => expect(host.http.fetch).toHaveBeenCalledWith(expect.objectContaining({ url: "https://example.com" })));
+    await vi.waitFor(() => expect(host.logger.info).toHaveBeenCalledWith(expect.stringContaining("200")));
   });
 
   it("provides a typed mock repository boundary for browser development", async () => {
@@ -155,9 +278,22 @@ describe("standalone starter module", () => {
     if (!grant) throw new Error("expected mock repository grant");
     await host.sdk.moduleRepository.scan(grant.id);
     await host.sdk.moduleRepository.install(grant.id, "sample-module-0.1.0.mtp");
+    const plan = await host.sdk.moduleRepository.previewInstallPlan(grant.id, "sample-module-0.1.0.mtp");
+    await host.sdk.moduleRepository.executeInstallPlan(grant.id, plan.planId);
 
     expect(host.sdk.moduleRepository.scan).toHaveBeenCalledWith("repository-grant");
     expect(host.sdk.moduleRepository.install).toHaveBeenCalledWith("repository-grant", "sample-module-0.1.0.mtp");
+    expect(host.sdk.moduleRepository.previewInstallPlan).toHaveBeenCalledWith("repository-grant", "sample-module-0.1.0.mtp");
+    expect(host.sdk.moduleRepository.executeInstallPlan).toHaveBeenCalledWith("repository-grant", "plan:sample-module-0.1.0.mtp");
+  });
+
+  it("simulates blocked and stale dependency plans", async () => {
+    const host = hostSdk();
+    const blocked = await host.sdk.moduleRepository.previewInstallPlan("repository-grant", "blocked.mtp");
+    expect(blocked.executable).toBe(false);
+    expect(blocked.diagnostics[0]?.code).toBe("missing_dependency");
+    await expect(host.sdk.moduleRepository.executeInstallPlan("repository-grant", "stale-plan"))
+      .rejects.toThrow("stale_plan");
   });
 
   it("runs only an executable selected through an opaque grant", async () => {
@@ -222,9 +358,9 @@ describe("standalone starter module", () => {
     document.body.append(page);
 
     expect(page.shadowRoot?.textContent).toContain("Host");
-    expect(page.shadowRoot?.textContent).toContain("0.2.0");
+    expect(page.shadowRoot?.textContent).toContain("0.3.0");
     host.sdk.settings.set("showDetails", false);
-    expect(page.shadowRoot?.textContent).not.toContain("0.2.0");
+    expect(page.shadowRoot?.textContent).not.toContain("0.3.0");
   });
 
   it("renders Chinese and English from the Host SDK locale subscription", async () => {

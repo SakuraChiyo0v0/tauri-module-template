@@ -1,7 +1,8 @@
 import { activate } from "./module";
 import type {
   LogLevel,
-  RuntimeModuleHostSdkV5,
+  RuntimeModuleEventEnvelope,
+  RuntimeModuleHostSdkV12,
   RuntimeServiceHandler,
   RuntimeSqlValue,
   SupportedLocale,
@@ -17,6 +18,7 @@ let theme: ThemeState = { mode: "light", preset: "neutral" };
 let locale: SupportedLocale = "zh-CN";
 const privateFiles = new Map<string, number[]>();
 const exposedServices = new Map<string, Record<string, RuntimeServiceHandler>>();
+const eventListeners = new Map<string, Set<(event: RuntimeModuleEventEnvelope) => void>>();
 
 function readSettings() {
   try {
@@ -47,9 +49,9 @@ function writeDatabase(value: ReturnType<typeof readDatabase>) {
   localStorage.setItem(databaseKey, JSON.stringify(value));
 }
 
-const hostSdk: RuntimeModuleHostSdkV5 = {
-  sdkVersion: 5,
-  hostVersion: "0.2.0-dev",
+const hostSdk: RuntimeModuleHostSdkV12 = {
+  sdkVersion: 12,
+  hostVersion: "0.3.0-dev",
   module: { id: "starter-module", version: "0.1.0-dev" },
   logger: {
     trace: (message) => log("trace", message),
@@ -149,6 +151,50 @@ const hostSdk: RuntimeModuleHostSdkV5 = {
       throw new Error(`Mock dependency service is unavailable: ${providerModuleId}/${serviceId}.${method}`);
     },
   },
+  events: {
+    publish(eventId, payload = null) {
+      const listeners = eventListeners.get(eventId);
+      if (!listeners) return;
+      const envelope = { eventId, publisherModuleId: "starter-module", publishedAt: new Date().toISOString(), payload };
+      queueMicrotask(() => listeners.forEach((listener) => {
+        try { listener(envelope); } catch { log("error", `Mock event listener for ${eventId} failed`); }
+      }));
+    },
+    subscribe(eventId, listener) {
+      let listeners = eventListeners.get(eventId);
+      if (!listeners) { listeners = new Set(); eventListeners.set(eventId, listeners); }
+      listeners.add(listener);
+      return () => { listeners.delete(listener); };
+    },
+  },
+  notifications: {
+    async show(notification: { title: string; body?: string }) {
+      log("info", `Mock notification: ${notification.title}${notification.body ? ` — ${notification.body}` : ""}`);
+    },
+  },
+  data: {
+    async exportBackup() {
+      log("info", "Mock data export (no disk write)");
+      return { grantId: "starter-module:mock.mtbk:0", displayName: "mock.mtbk", size: 0 };
+    },
+    async importBackup() {
+      log("info", "Mock data import (no disk write)");
+    },
+  },
+  clipboard: {
+    async readText() { log("info", "Mock clipboard read"); return "starter-module"; },
+    async writeText(text: string) { log("info", `Mock clipboard write: ${text}`); },
+  },
+  dialogs: {
+    async confirm(options) { log("info", `Mock confirm: ${options.title}`); return true; },
+    async prompt(options) { log("info", `Mock prompt: ${options.title}`); return options.defaultValue ?? ""; },
+  },
+  http: {
+    async fetch(options) {
+      log("info", `Mock http fetch: ${options.url}`);
+      return { status: 200, headers: [["content-type", "text/plain"]], body: [104, 105], truncated: false };
+    },
+  },
   moduleRepository: {
     async chooseDirectory() {
       return {
@@ -168,8 +214,8 @@ const hostSdk: RuntimeModuleHostSdkV5 = {
           name: { "zh-CN": "示例模块", en: "Sample Module" },
           description: { "zh-CN": "浏览器预览数据", en: "Browser preview data" },
           version: "0.1.0",
-          hostVersion: ">=0.2.0, <0.3.0",
-          sdkVersion: 5,
+          hostVersion: ">=0.3.0, <0.4.0",
+          sdkVersion: 8,
           entry: "index.js",
           dependencies: { required: [], optional: [] },
           navigation: [],
@@ -189,6 +235,42 @@ const hostSdk: RuntimeModuleHostSdkV5 = {
         status: "active",
         packageInstalled: true,
         planChanged: true,
+      };
+    },
+    async previewInstallPlan(_grantId, fileName) {
+      const blocked = fileName.includes("blocked");
+      return {
+        planId: `mock-plan:${fileName}`,
+        targetModuleId: "sample-module",
+        targetVersion: "0.1.0",
+        executable: !blocked,
+        entries: blocked ? [] : [{
+          moduleId: "sample-module",
+          name: { "zh-CN": "示例模块", en: "Sample Module" },
+          version: "0.1.0",
+          currentVersion: null,
+          action: "install",
+          requiredDependencies: [],
+          permissionSummary: [],
+          requiresPermissionApproval: false,
+        }],
+        activationOrder: blocked ? [] : ["sample-module"],
+        diagnostics: blocked ? [{
+          code: "missing_dependency",
+          moduleId: "sample-module",
+          dependencyId: "missing-module",
+          requiredVersion: "^1.0.0",
+          availableVersions: [],
+          relatedModules: [],
+        }] : [],
+      };
+    },
+    async executeInstallPlan(_grantId, planId) {
+      if (planId.includes("stale")) throw new Error("stale_plan");
+      return {
+        targetModuleId: "sample-module",
+        planChanged: true,
+        modules: [{ moduleId: "sample-module", version: "0.1.0", status: "active" }],
       };
     },
   },

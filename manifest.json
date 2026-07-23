@@ -6,9 +6,9 @@
     "zh-CN": "不包含业务功能的独立运行时模块起点。",
     "en": "Business-neutral standalone runtime module starter."
   },
-  "version": "0.1.0",
-  "hostVersion": ">=0.2.0, <0.3.0",
-  "sdkVersion": 5,
+  "version": "0.2.0",
+  "hostVersion": ">=0.3.0, <0.4.0",
+  "sdkVersion": 12,
   "entry": "index.js",
   "dependencies": {
     "required": [],
@@ -16,6 +16,10 @@
   },
   "services": {
     "provides": ["starter.v1"]
+  },
+  "events": {
+    "publishes": ["starter.changed.v1"],
+    "subscribes": ["starter.changed.v1"]
   },
   "navigation": [
     {
@@ -48,6 +52,9 @@
     "shortcuts": [
       { "id": "show-main", "description": { "zh-CN": "显示模块页面", "en": "Show the module page" }, "accelerator": "Ctrl+Shift+M" }
     ],
-    "moduleRepository": null
+    "moduleRepository": null,
+    "notifications": { "system": true },
+    "clipboard": { "text": true },
+    "http": { "origins": ["https://example.com"] }
   }
 }

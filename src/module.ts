@@ -1,10 +1,11 @@
-import type { RuntimeModuleHostSdkV5, SupportedLocale, ThemeState } from "./sdk";
+import type { RuntimeModuleHostSdkV12, SupportedLocale, ThemeState } from "./sdk";
 
 const ELEMENT_NAME = "starter-module-page";
-let activeHost: RuntimeModuleHostSdkV5 | undefined;
+let activeHost: RuntimeModuleHostSdkV12 | undefined;
 let unsubscribeTray: (() => void) | undefined;
 let unsubscribeShortcut: (() => void) | undefined;
 let unregisterService: (() => void) | undefined;
+let unsubscribeEvent: (() => void) | undefined;
 
 const messages = {
   title: { "zh-CN": "独立模块已就绪", en: "Standalone module ready" },
@@ -17,6 +18,15 @@ const messages = {
   records: { "zh-CN": "{count} 条记录", en: "{count} records" },
   storeRecord: { "zh-CN": "保存测试记录 · 本地计数 {count}", en: "Store test record · local count {count}" },
   runExecutable: { "zh-CN": "运行已授权程序", en: "Run granted executable" },
+  notify: { "zh-CN": "发送系统通知", en: "Send system notification" },
+  notificationSent: { "zh-CN": "系统通知已发送。", en: "System notification sent." },
+  copyLabel: { "zh-CN": "复制模块 ID", en: "Copy module id" },
+  copiedLabel: { "zh-CN": "已复制模块 ID。", en: "Module id copied." },
+  confirmLabel: { "zh-CN": "确认操作", en: "Confirm action" },
+  confirmedLabel: { "zh-CN": "用户已确认。", en: "User confirmed." },
+  cancelledLabel: { "zh-CN": "用户已取消。", en: "User cancelled." },
+  fetchLabel: { "zh-CN": "请求示例接口", en: "Fetch sample endpoint" },
+  fetchedLabel: { "zh-CN": "请求完成，状态 {status}。", en: "Request done, status {status}." },
   grantHelp: { "zh-CN": "在模块管理中授权一个可执行文件，以测试受控进程启动。", en: "Grant an executable in Module Manager to test controlled process launch." },
   noGrant: { "zh-CN": "没有可用的可执行文件授权。", en: "No executable grant is available." },
   processExit: { "zh-CN": "进程退出码：{code}。", en: "Process exited with code {code}." },
@@ -129,6 +139,10 @@ class StarterModulePage extends HTMLElement {
         <div class="actions">
           <button type="button" data-action="database">${t("storeRecord", { count: this.#count })}</button>
           <button type="button" data-action="process">${t("runExecutable")}</button>
+          <button type="button" data-action="notify">${t("notify")}</button>
+          <button type="button" data-action="copy">${t("copyLabel")}</button>
+          <button type="button" data-action="confirm">${t("confirmLabel")}</button>
+          <button type="button" data-action="fetch">${t("fetchLabel")}</button>
         </div>
         <p class="process-result">${escapeHtml(processResult)}</p>
       </article>
@@ -140,6 +154,7 @@ class StarterModulePage extends HTMLElement {
         await host.database.execute("INSERT INTO module_events (kind) VALUES (?1)", ["button"]);
         await this.#loadDatabaseRecords();
         await host.logger.info("Starter record stored");
+        host.events.publish("starter.changed.v1", { kind: "record", count: this.#count });
       } catch {
         await host.logger.error("Starter record store failed");
       }
@@ -162,11 +177,39 @@ class StarterModulePage extends HTMLElement {
       }
       this.#render();
     });
+    this.#root.querySelector('[data-action="notify"]')?.addEventListener("click", async () => {
+      try {
+        await host.notifications.show({ title: host.module.id, body: t("notificationSent") });
+        await host.logger.info("System notification sent");
+      } catch {
+        await host.logger.warn("System notification send failed");
+      }
+    });
+    this.#root.querySelector('[data-action="copy"]')?.addEventListener("click", async () => {
+      try {
+        await host.clipboard.writeText(host.module.id);
+        await host.logger.info("Module id copied to clipboard");
+      } catch {
+        await host.logger.warn("Clipboard write failed");
+      }
+    });
+    this.#root.querySelector('[data-action="confirm"]')?.addEventListener("click", async () => {
+      const confirmed = await host.dialogs.confirm({ title: t("confirmLabel") });
+      await host.logger.info(confirmed ? "User confirmed dialog" : "User cancelled dialog");
+    });
+    this.#root.querySelector('[data-action="fetch"]')?.addEventListener("click", async () => {
+      try {
+        const response = await host.http.fetch({ url: "https://example.com" });
+        await host.logger.info(t("fetchedLabel", { status: response.status }));
+      } catch {
+        await host.logger.warn("HTTP request failed");
+      }
+    });
   }
 }
 
-export async function activate(hostSdk: RuntimeModuleHostSdkV5) {
-  if (hostSdk.sdkVersion !== 5) throw new Error(`Unsupported Host SDK version: ${hostSdk.sdkVersion}`);
+export async function activate(hostSdk: RuntimeModuleHostSdkV12) {
+  if (hostSdk.sdkVersion !== 12) throw new Error(`Unsupported Host SDK version: ${hostSdk.sdkVersion}`);
   const userVersion = await hostSdk.database.getUserVersion();
   if (userVersion < 1) {
     await hostSdk.database.transaction([{
@@ -182,6 +225,9 @@ export async function activate(hostSdk: RuntimeModuleHostSdkV5) {
   unregisterService = hostSdk.services.expose("starter.v1", {
     ping: () => ({ status: "ready", moduleVersion: hostSdk.module.version }),
   });
+  unsubscribeEvent = hostSdk.events.subscribe("starter.changed.v1", () => {
+    void hostSdk.logger.info("Starter change event received");
+  });
   activeHost = hostSdk;
   if (!customElements.get(ELEMENT_NAME)) customElements.define(ELEMENT_NAME, StarterModulePage);
   await hostSdk.logger.info("Starter module activated");
@@ -192,8 +238,10 @@ export async function deactivate() {
   unsubscribeTray?.();
   unsubscribeShortcut?.();
   unregisterService?.();
+  unsubscribeEvent?.();
   unsubscribeTray = undefined;
   unsubscribeShortcut = undefined;
   unregisterService = undefined;
+  unsubscribeEvent = undefined;
   activeHost = undefined;
 }

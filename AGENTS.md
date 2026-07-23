@@ -5,7 +5,7 @@ This repository builds one independently installable `.mtp` module for Modular T
 ## Boundaries
 
 - Never import files from the desktop base repository or assume a sibling checkout exists.
-- `src/sdk.ts` is the public Host SDK V5 type snapshot. Do not add capabilities that the base does not expose.
+- `src/sdk.ts` is the public Host SDK V12 type snapshot. Do not add capabilities that the base does not expose.
 - `manifest.json` uses schema V2. Every host-rendered name, description, navigation label, setting label, tray label, and shortcut description must provide non-empty `zh-CN` and `en` values.
 - Module-owned page text must provide both Chinese and English, read `hostSdk.i18n.getLocale()` during initial render, and subscribe to language changes without reactivation.
 - `src/module.ts` must export `activate(hostSdk)` and may export `deactivate()`.
@@ -13,6 +13,12 @@ This repository builds one independently installable `.mtp` module for Modular T
 - Bundle all npm dependencies into the single ESM `build/index.js`.
 - Declare only other `.mtp` modules in manifest dependencies; npm packages are build-time dependencies.
 - Declare provided services in `services.provides`. Call only modules listed in dependencies, and keep service inputs and outputs JSON-compatible.
+- Declare publishable and subscribable events in `events.publishes` and `events.subscribes`. Event subscriptions do not require a module dependency; keep payloads JSON-compatible and never put secrets in event payloads.
+- Declare system notifications in `nativeCapabilities.notifications` (`{ system: true }`). Send only user-facing text via `hostSdk.notifications.show`; never attach database content or secrets. The capability requires user approval before activation.
+- Use `hostSdk.data.exportBackup()` / `importBackup(grantId)` only for the module's own SQLite and private settings. Modules never see real paths; restore requires the module to be stopped and rejects archives belonging to other modules.
+- Declare clipboard text access in `nativeCapabilities.clipboard` (`{ text: true }`). Read/write only plain text via `hostSdk.clipboard`; never log clipboard contents or store them outside the module's own data.
+- Use `hostSdk.dialogs.confirm` / `prompt` for confirmations and text input. Content is plain text only; never inject HTML or scripts. Open at most one dialog at a time per module.
+- Declare allowed HTTPS origins in `nativeCapabilities.http.origins`. Fetch only declared origins via `hostSdk.http.fetch`; never log full response bodies or credentials, and never attempt private addresses.
 - Use semantic CSS variables inherited from the base. Do not hard-code product colors.
 - Use parameterized module-private database calls. Never attempt ATTACH, PRAGMA, filesystem paths, or direct access to another module's schema.
 - Use only opaque file grants and module-private relative paths. Never import raw Tauri APIs or infer host filesystem paths.

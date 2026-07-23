@@ -58,7 +58,10 @@ export type NativePermissionSummary =
   | { kind: "registry"; hive: string; key: string; access: "read" | "read_write" }
   | { kind: "tray"; count: number }
   | { kind: "shortcuts"; count: number }
-  | { kind: "module_repository_install" };
+  | { kind: "module_repository_install" }
+  | { kind: "notifications" }
+  | { kind: "clipboard" }
+  | { kind: "http"; origins: string[] };
 
 export interface RuntimeModuleManifest {
   schemaVersion: 2;
@@ -67,13 +70,14 @@ export interface RuntimeModuleManifest {
   description: LocalizedText;
   version: string;
   hostVersion: string;
-  sdkVersion: 2 | 3 | 4 | 5;
+  sdkVersion: 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
   entry: "index.js";
   dependencies: {
     required: Array<{ id: string; version: string }>;
     optional: Array<{ id: string; version: string }>;
   };
   services?: { provides: string[] };
+  events?: { publishes: string[]; subscribes: string[] };
   navigation: Array<{
     id: string;
     title: LocalizedText;
@@ -102,6 +106,42 @@ export interface RuntimeModuleRepositoryInstallResult {
   status: "active" | "disabled" | "waiting" | "blocked";
   packageInstalled: boolean;
   planChanged: boolean;
+}
+
+export interface RuntimeModuleRepositoryInstallPlan {
+  planId: string;
+  targetModuleId: string;
+  targetVersion: string;
+  executable: boolean;
+  entries: Array<{
+    moduleId: string;
+    name: LocalizedText;
+    version: string;
+    currentVersion: string | null;
+    action: "keep" | "install" | "upgrade";
+    requiredDependencies: Array<{ id: string; version: string }>;
+    permissionSummary: NativePermissionSummary[];
+    requiresPermissionApproval: boolean;
+  }>;
+  activationOrder: string[];
+  diagnostics: Array<{
+    code: string;
+    moduleId: string;
+    dependencyId: string | null;
+    requiredVersion: string | null;
+    availableVersions: string[];
+    relatedModules: string[];
+  }>;
+}
+
+export interface RuntimeModuleRepositoryInstallPlanResult {
+  targetModuleId: string;
+  planChanged: boolean;
+  modules: Array<{
+    moduleId: string;
+    version: string;
+    status: "active" | "disabled" | "waiting" | "blocked";
+  }>;
 }
 
 export interface RuntimeModuleHostSdkV5 {
@@ -181,7 +221,122 @@ export interface RuntimeModuleHostSdkV5 {
   };
 }
 
+export interface RuntimeModuleHostSdkV6 extends Omit<RuntimeModuleHostSdkV5, "sdkVersion" | "moduleRepository"> {
+  readonly sdkVersion: 6;
+  readonly moduleRepository: RuntimeModuleHostSdkV5["moduleRepository"] & {
+    previewInstallPlan(grantId: string, fileName: string): Promise<RuntimeModuleRepositoryInstallPlan>;
+    executeInstallPlan(grantId: string, planId: string): Promise<RuntimeModuleRepositoryInstallPlanResult>;
+  };
+}
+
+export interface RuntimeModuleEventEnvelope {
+  readonly eventId: string;
+  readonly publisherModuleId: string;
+  readonly publishedAt: string;
+  readonly payload: RuntimeServiceValue;
+}
+
+export interface RuntimeModuleEvents {
+  publish(eventId: string, payload?: RuntimeServiceValue): void;
+  subscribe(eventId: string, listener: (event: RuntimeModuleEventEnvelope) => void): () => void;
+}
+
+export interface RuntimeModuleHostSdkV7 extends Omit<RuntimeModuleHostSdkV6, "sdkVersion"> {
+  readonly sdkVersion: 7;
+  readonly events: RuntimeModuleEvents;
+}
+
+export interface RuntimeModuleNotification {
+  title: string;
+  body?: string;
+}
+
+export interface RuntimeModuleNotifications {
+  show(notification: RuntimeModuleNotification): Promise<void>;
+}
+
+export interface RuntimeModuleHostSdkV8 extends Omit<RuntimeModuleHostSdkV7, "sdkVersion"> {
+  readonly sdkVersion: 8;
+  readonly notifications: RuntimeModuleNotifications;
+}
+
+export interface RuntimeModuleDataBackupSummary {
+  readonly grantId: string;
+  readonly displayName: string;
+  readonly size: number;
+}
+
+export interface RuntimeModuleData {
+  exportBackup(): Promise<RuntimeModuleDataBackupSummary | null>;
+  importBackup(grantId: string): Promise<void>;
+}
+
+export interface RuntimeModuleHostSdkV9 extends Omit<RuntimeModuleHostSdkV8, "sdkVersion"> {
+  readonly sdkVersion: 9;
+  readonly data: RuntimeModuleData;
+}
+
+export interface RuntimeModuleClipboard {
+  readText(): Promise<string>;
+  writeText(text: string): Promise<void>;
+}
+
+export interface RuntimeModuleHostSdkV10 extends Omit<RuntimeModuleHostSdkV9, "sdkVersion"> {
+  readonly sdkVersion: 10;
+  readonly clipboard: RuntimeModuleClipboard;
+}
+
+export interface RuntimeModuleConfirmOptions {
+  title: string;
+  message?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+}
+
+export interface RuntimeModulePromptOptions {
+  title: string;
+  message?: string;
+  defaultValue?: string;
+  placeholder?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+}
+
+export interface RuntimeModuleDialogs {
+  confirm(options: RuntimeModuleConfirmOptions): Promise<boolean>;
+  prompt(options: RuntimeModulePromptOptions): Promise<string | null>;
+}
+
+export interface RuntimeModuleHostSdkV11 extends Omit<RuntimeModuleHostSdkV10, "sdkVersion"> {
+  readonly sdkVersion: 11;
+  readonly dialogs: RuntimeModuleDialogs;
+}
+
+export interface RuntimeModuleHttpRequest {
+  url: string;
+  method?: string;
+  headers?: Array<[string, string]>;
+  body?: number[];
+  timeoutMs?: number;
+}
+
+export interface RuntimeModuleHttpResponse {
+  status: number;
+  headers: Array<[string, string]>;
+  body: number[];
+  truncated: boolean;
+}
+
+export interface RuntimeModuleHttp {
+  fetch(options: RuntimeModuleHttpRequest): Promise<RuntimeModuleHttpResponse>;
+}
+
+export interface RuntimeModuleHostSdkV12 extends Omit<RuntimeModuleHostSdkV11, "sdkVersion"> {
+  readonly sdkVersion: 12;
+  readonly http: RuntimeModuleHttp;
+}
+
 export interface RuntimeModuleExports {
-  activate(hostSdk: RuntimeModuleHostSdkV5): void | Promise<void>;
+  activate(hostSdk: RuntimeModuleHostSdkV12): void | Promise<void>;
   deactivate?(): void | Promise<void>;
 }
